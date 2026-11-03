@@ -341,6 +341,11 @@
           "type": "number",
           "default": 3000,
           "description": "Port for the local Dagster UI started by PDP: Start Dagster."
+        },
+        "pdp.graphFontSize": {
+          "type": "number",
+          "default": 14,
+          "description": "Font size (px) of the task graph node labels."
         }
       }
     }

@@ -2,3 +2,5 @@
 build
 coverage
 media/*.svg
+# pdp-authored project files, not ours to reformat
+src/test/fixtures

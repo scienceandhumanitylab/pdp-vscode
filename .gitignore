@@ -7,3 +7,5 @@ node_modules
 media/mermaid.min.js
 src/test/fixtures/**/output/
 src/test/fixtures/**/input/
+# written by the test host when it opens the fixture as a workspace
+src/test/fixtures/**/.vscode/

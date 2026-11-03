@@ -14,3 +14,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   (where **Run Only This Task** refuses).
 - Right-clicking a task in the Tasks view now has a labelled **Clean Task**
   entry in addition to the inline trash icon.
+- Graph nodes are compact (`task ✗` / `task ✓`), colour-coded gruvbox-style
+  red (stale) / blue (fresh), with snug boxes and a configurable font size
+  (**`pdp.graphFontSize`**, default 14px, re-renders live) so more of the DAG
+  fits the narrow sidebar; hovering a node shows its full state
+  (stale/fresh).
+- Right-clicking a graph node opens a menu of task actions (Run, Run only,
+  Run to here, Run from here, Force run, Run on Slurm, Clean, Open task.yml).

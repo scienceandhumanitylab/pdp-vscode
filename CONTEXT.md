@@ -82,5 +82,6 @@ _Avoid_: Cluster view, Slurm view.
 
 **Graph view**:
 The sidebar view that draws the dependency graph of all tasks, top to bottom,
-each marked stale or fresh. Clicking a task opens its `task.yml`.
+each marked stale or fresh. Clicking a task opens its `task.yml`; right-clicking
+opens its task menu.
 _Avoid_: Tree, DAG view, diagram.

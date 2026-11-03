@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import * as vscode from "vscode";
 import * as pdp from "../pdp";
 import { PdpTasksProvider, TaskItem } from "../tasksView";
 
@@ -68,6 +69,30 @@ suite("fixture integration", () => {
     assert.strictEqual(
       status.tasks.find((task) => task.id === "report")?.stale,
       true,
+    );
+  });
+
+  test("commands dispatched with a task id string do not re-prompt", async () => {
+    await vscode.commands.executeCommand("pdp.refresh");
+    await vscode.commands.executeCommand("pdp.openTask", "clean");
+    const editor = vscode.window.activeTextEditor;
+    assert.ok(editor, "openTask did not open a document");
+    assert.match(
+      editor.document.uri.fsPath,
+      /clean[/\\]task\.yml$/,
+      `expected clean/task.yml, got ${editor.document.uri.fsPath}`,
+    );
+  });
+
+  test("commands dispatched with an unknown or flag-like task id do nothing", async () => {
+    const before = vscode.window.activeTextEditor?.document.uri.fsPath;
+    await vscode.commands.executeCommand("pdp.refresh");
+    await vscode.commands.executeCommand("pdp.openTask", "nope");
+    await vscode.commands.executeCommand("pdp.openTask", "--force");
+    assert.strictEqual(
+      vscode.window.activeTextEditor?.document.uri.fsPath,
+      before,
+      "no task document should have opened",
     );
   });
 });

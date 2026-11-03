@@ -1,7 +1,11 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { graphView } from "../extension";
-import { mermaidDefinition } from "../graphView";
+import {
+  mermaidDefinition,
+  nodeLabels,
+  PdpGraphViewProvider,
+} from "../graphView";
 import { parseStatus } from "../pdp";
 
 const status = parseStatus(
@@ -44,11 +48,19 @@ suite("graph", () => {
     assert.match(def, /classDef fresh/);
   });
 
-  test("each task is a node labelled with its state", () => {
+  test("each task is a node labelled with a short state marker", () => {
     const def = mermaidDefinition(status);
-    assert.match(def, /\bn0\["fetch \(stale\)"\]:::stale/);
-    assert.match(def, /\bn1\["clean \(fresh\)"\]:::fresh/);
-    assert.match(def, /\bn2\["report \(stale\)"\]:::stale/);
+    assert.match(def, /\bn0\["fetch ✗"\]:::stale/);
+    assert.match(def, /\bn1\["clean ✓"\]:::fresh/);
+    assert.match(def, /\bn2\["report ✗"\]:::stale/);
+  });
+
+  test("nodeLabels carries the full state for hover titles", () => {
+    assert.deepStrictEqual(nodeLabels(status), [
+      "fetch (stale)",
+      "clean (fresh)",
+      "report (stale)",
+    ]);
   });
 
   test("dependencies become edges from upstream to downstream", () => {
@@ -76,6 +88,69 @@ suite("graph", () => {
     );
     const def = mermaidDefinition(status);
     assert.doesNotMatch(def, /-->/);
+  });
+
+  test("a taskMenu message maps the node back to its id, and the render carries the font size setting", async () => {
+    const opened: string[] = [];
+    const menus: string[] = [];
+    const posted: { type: string; labels?: string[]; fontSize?: number }[] = [];
+    const listeners: Array<(message: unknown) => void> = [];
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: (listener: (message: unknown) => void) => {
+          listeners.push(listener);
+          return { dispose: () => undefined };
+        },
+        postMessage: (message: {
+          type: string;
+          labels?: string[];
+          fontSize?: number;
+        }) => {
+          posted.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      onDidDispose: () => ({ dispose: () => undefined }),
+    } as unknown as vscode.WebviewView;
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      (id) => opened.push(id),
+      (id) => menus.push(id),
+    );
+
+    provider.resolveWebviewView(view);
+    provider.update(status);
+    listeners.forEach((listener) => listener({ type: "taskMenu", node: "n1" }));
+
+    assert.deepStrictEqual(menus, ["clean"]);
+    assert.deepStrictEqual(opened, []);
+    const render = posted.find((message) => message.type === "render");
+    assert.deepStrictEqual(render?.labels, nodeLabels(status));
+    assert.strictEqual(render?.fontSize, 14, "expected the default font size");
+
+    const config = vscode.workspace.getConfiguration("pdp");
+    await config.update("graphFontSize", 20, vscode.ConfigurationTarget.Global);
+    try {
+      // No manual update(): the config listener must re-render on its own.
+      const deadline = Date.now() + 2000;
+      let reRendered: number | undefined;
+      while (Date.now() < deadline) {
+        reRendered = posted.filter((m) => m.type === "render").at(-1)?.fontSize;
+        if (reRendered === 20) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.strictEqual(reRendered, 20, "config change did not re-render");
+    } finally {
+      await config.update(
+        "graphFontSize",
+        undefined,
+        vscode.ConfigurationTarget.Global,
+      );
+    }
+    provider.dispose();
   });
 
   test("graph view renders the graph with mermaid", async () => {

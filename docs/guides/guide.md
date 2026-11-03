@@ -44,10 +44,11 @@ Run the tests with `pnpm test`.
 
 ## Settings
 
-| Setting           | Default | Meaning                                                |
-| ----------------- | ------- | ------------------------------------------------------ |
-| `pdp.path`        | `pdp`   | Path to the pdp binary, e.g. `/path/to/.venv/bin/pdp`  |
-| `pdp.dagsterPort` | `3000`  | Port for the local Dagster UI started from the sidebar |
+| Setting             | Default | Meaning                                                |
+| ------------------- | ------- | ------------------------------------------------------ |
+| `pdp.path`          | `pdp`   | Path to the pdp binary, e.g. `/path/to/.venv/bin/pdp`  |
+| `pdp.dagsterPort`   | `3000`  | Port for the local Dagster UI started from the sidebar |
+| `pdp.graphFontSize` | `14`    | Font size (px) of the task graph node labels           |
 
 ## First use
 

@@ -23,6 +23,7 @@ export function activate(context: vscode.ExtensionContext): void {
   graphView = new PdpGraphViewProvider(
     context.extensionUri,
     (id) => void openTaskYml(id),
+    (id) => void taskMenu(id),
   );
   context.subscriptions.push(
     ...registerCommands(),
@@ -302,9 +303,7 @@ async function createTask(): Promise<void> {
     prompt: "Task id",
     placeHolder: "fetch",
     validateInput: (value) =>
-      /^[a-z0-9][a-z0-9_-]*$/i.test(value.trim())
-        ? null
-        : "Use letters, digits, - or _",
+      TASK_ID_PATTERN.test(value.trim()) ? null : "Use letters, digits, - or _",
   });
   if (id === undefined) {
     return;
@@ -457,6 +456,33 @@ async function runPick(): Promise<void> {
   await runWithProgress(args, "PDP: Run");
 }
 
+// Task ids travel to pdp as bare argv words, so an id like "--force" in a
+// hostile pdp.yml must never be dispatched as if the user picked it.
+const TASK_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
+
+// Right-click a graph node: the task-level actions as a QuickPick, dispatched
+// to the existing commands with the task id so nothing re-prompts.
+const TASK_MENU_ACTIONS = [
+  { label: "Run", command: "pdp.runTask" },
+  { label: "Run only", command: "pdp.runOnly" },
+  { label: "Run to here", command: "pdp.runTo" },
+  { label: "Run from here", command: "pdp.runFrom" },
+  { label: "Force run", command: "pdp.runForce" },
+  { label: "Run on Slurm", command: "pdp.runSlurm" },
+  { label: "Clean", command: "pdp.cleanTask" },
+  { label: "Open task.yml", command: "pdp.openTask" },
+];
+
+async function taskMenu(id: string): Promise<void> {
+  const picked = await vscode.window.showQuickPick(
+    TASK_MENU_ACTIONS.map((action) => ({ ...action, description: id })),
+    { placeHolder: `PDP: ${id}` },
+  );
+  if (picked) {
+    await vscode.commands.executeCommand(picked.command, id);
+  }
+}
+
 async function withTask(
   arg: unknown,
   action: (taskId: string) => Promise<void>,
@@ -472,6 +498,22 @@ async function taskFromArgOrPick(
 ): Promise<pdp.TaskStatus | undefined> {
   if (arg instanceof TaskItem) {
     return arg.task;
+  }
+  // Dispatched commands pass a task id string; check its shape and validate
+  // it against the last status so nothing unknown or forged reaches pdp.
+  if (typeof arg === "string") {
+    if (!TASK_ID_PATTERN.test(arg)) {
+      vscode.window.showWarningMessage(`PDP: Invalid task id "${arg}"`);
+      return undefined;
+    }
+    if (!lastStatus) {
+      await refresh();
+    }
+    const task = lastStatus?.tasks.find((candidate) => candidate.id === arg);
+    if (!task) {
+      vscode.window.showWarningMessage(`PDP: Unknown task "${arg}"`);
+    }
+    return task;
   }
   const tasks = lastStatus?.tasks;
   if (!tasks?.length) {
