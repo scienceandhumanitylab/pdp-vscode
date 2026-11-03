@@ -1,0 +1,4 @@
+name: clean
+entrypoint: make
+depends_on:
+  - fetch

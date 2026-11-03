@@ -5,3 +5,5 @@ node_modules
 *.vsix
 *.swp
 media/mermaid.min.js
+src/test/fixtures/**/output/
+src/test/fixtures/**/input/

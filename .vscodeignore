@@ -2,6 +2,14 @@
 .vscode-test/**
 src/**
 scripts/**
+out/test/**
+docs/**
+AGENTS.md
+CONTEXT.md
+.prettierignore
+.prettierrc
+pnpm-lock.yaml
+pnpm-workspace.yaml
 .gitignore
 .yarnrc
 vsc-extension-quickstart.md

@@ -1,0 +1,3 @@
+name: fetch
+entrypoint: make
+depends_on: []

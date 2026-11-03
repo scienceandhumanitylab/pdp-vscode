@@ -21,7 +21,7 @@
   dynamic import, which a single shipped file cannot satisfy — the classic
   build has no dynamic imports and matches the plan's "single dist file".
 - CSP: `default-src 'none'; style-src <cspSource> 'unsafe-inline'; script-src
-  <cspSource> 'nonce-…'; img-src <cspSource> data:` with a
+<cspSource> 'nonce-…'; img-src <cspSource> data:` with a
   `crypto.randomBytes` nonce; `localResourceRoots` limited to `media/`.
 
 ## Tests added

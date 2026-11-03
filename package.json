@@ -4,6 +4,10 @@
   "description": "Run and watch your pdp project from the sidebar: tasks, remote runs, and the Dagster graph.",
   "version": "0.0.1",
   "publisher": "scienceandhumanitylab",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scienceandhumanitylab/pdp-vscode.git"
+  },
   "engines": {
     "vscode": "^1.140.0"
   },
@@ -346,6 +350,7 @@
     "@types/vscode": "^1.140.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^4.1.0",
     "eslint": "^10.5.0",
     "mermaid": "^12.2.0",
     "prettier": "3.9.10",

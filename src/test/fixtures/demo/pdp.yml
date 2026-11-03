@@ -1,0 +1,5 @@
+name: demo
+tasks:
+  - fetch
+  - clean
+  - report
