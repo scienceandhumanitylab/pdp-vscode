@@ -1,5 +1,8 @@
 name: demo
 tasks:
-  - fetch
-  - clean
-  - report
+- import
+- clean
+- report
+- filter
+- model
+- explore

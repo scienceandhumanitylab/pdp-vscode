@@ -1,4 +1,6 @@
 name: report
 entrypoint: make
 depends_on:
-  - clean
+  - filter
+  - explore
+  - model

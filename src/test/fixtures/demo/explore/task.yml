@@ -1,0 +1,3 @@
+name: explore
+entrypoint: make
+depends_on: [clean]

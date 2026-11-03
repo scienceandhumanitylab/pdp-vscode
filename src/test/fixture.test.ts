@@ -10,7 +10,7 @@ suite("fixture integration", () => {
     assert.strictEqual(status.project, "demo");
     assert.deepStrictEqual(
       status.tasks.map((task) => task.id),
-      ["fetch", "clean", "report"],
+      ["import", "clean", "filter", "explore", "model", "report"],
     );
   });
 
@@ -20,7 +20,14 @@ suite("fixture integration", () => {
     const res = await child.done;
     assert.strictEqual(res.code, 0);
     const report = pdp.reportFromOutput(res.stdout, res.stderr);
-    assert.deepStrictEqual(report.ran, ["fetch", "clean", "report"]);
+    assert.deepStrictEqual(report.ran, [
+      "import",
+      "clean",
+      "filter",
+      "explore",
+      "model",
+      "report",
+    ]);
     assert.deepStrictEqual(report.failed, []);
     assert.deepStrictEqual(report.noOutput, []);
 
@@ -35,7 +42,7 @@ suite("fixture integration", () => {
     const items = (await provider.getChildren()) as TaskItem[];
     assert.deepStrictEqual(
       items.map((item) => item.label),
-      ["fetch", "clean", "report"],
+      ["import", "clean", "filter", "explore", "model", "report"],
     );
     assert.strictEqual(items[0].command?.command, "pdp.openTask");
   });
@@ -55,7 +62,7 @@ suite("fixture integration", () => {
     const to = await pdp.spawnPdp(["run", "--to", "clean"]).done;
     assert.strictEqual(to.code, 0);
     const report = pdp.reportFromOutput(to.stdout, to.stderr);
-    assert.deepStrictEqual(report.ran, ["fetch", "clean"]);
+    assert.deepStrictEqual(report.ran, ["import", "clean"]);
 
     const status = await pdp.status();
     assert.strictEqual(
