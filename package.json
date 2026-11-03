@@ -1,30 +1,335 @@
 {
   "name": "pdp",
-  "displayName": "pdp",
-  "description": "",
+  "displayName": "PDP",
+  "description": "Run and watch your pdp project from the sidebar: tasks, remote runs, and the Dagster graph.",
   "version": "0.0.1",
+  "publisher": "scienceandhumanitylab",
   "engines": {
     "vscode": "^1.140.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "workspaceContains:pdp.yml"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "pdp.helloWorld",
-        "title": "Hello World"
+        "command": "pdp.init",
+        "title": "PDP: Init Project",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pdp.create",
+        "title": "PDP: Create Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pdp.scaffold",
+        "title": "PDP: Scaffold"
+      },
+      {
+        "command": "pdp.validate",
+        "title": "PDP: Validate"
+      },
+      {
+        "command": "pdp.refresh",
+        "title": "PDP: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pdp.runAll",
+        "title": "PDP: Run All (Stale)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pdp.runPick",
+        "title": "PDP: Run…"
+      },
+      {
+        "command": "pdp.runTask",
+        "title": "PDP: Run Task",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pdp.runOnly",
+        "title": "PDP: Run Only This Task"
+      },
+      {
+        "command": "pdp.runFrom",
+        "title": "PDP: Run From Here"
+      },
+      {
+        "command": "pdp.runForce",
+        "title": "PDP: Force Run Task"
+      },
+      {
+        "command": "pdp.runSlurm",
+        "title": "PDP: Run Task on Slurm"
+      },
+      {
+        "command": "pdp.cleanTask",
+        "title": "PDP: Clean Task",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "pdp.cleanAll",
+        "title": "PDP: Clean All",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "pdp.openTask",
+        "title": "PDP: Open task.yml"
+      },
+      {
+        "command": "pdp.revealTask",
+        "title": "PDP: Reveal Task Folder"
+      },
+      {
+        "command": "pdp.graph",
+        "title": "PDP: Show Graph",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "pdp.dagsterLocal",
+        "title": "PDP: Start Dagster (Local)",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "pdp.dagsterSlurm",
+        "title": "PDP: Start Dagster (Slurm)"
+      },
+      {
+        "command": "pdp.remoteStart",
+        "title": "PDP: Remote Start",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "pdp.remoteRunAll",
+        "title": "PDP: Remote Run All"
+      },
+      {
+        "command": "pdp.remoteRunTask",
+        "title": "PDP: Remote Run Task"
+      },
+      {
+        "command": "pdp.remotePush",
+        "title": "PDP: Remote Push"
+      },
+      {
+        "command": "pdp.remotePull",
+        "title": "PDP: Remote Pull"
+      },
+      {
+        "command": "pdp.remoteStop",
+        "title": "PDP: Remote Stop"
+      },
+      {
+        "command": "pdp.remoteRefresh",
+        "title": "PDP: Remote Status",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pdp.openDagsterUi",
+        "title": "PDP: Open Dagster UI",
+        "icon": "$(browser)"
+      },
+      {
+        "command": "pdp.stopProcess",
+        "title": "PDP: Stop Process",
+        "icon": "$(debug-stop)"
       }
     ],
-    "views": {
-      "explorer": [
+    "viewsContainers": {
+      "activitybar": [
         {
-          "id": "nodeDependencies",
-          "name": "Node Dependencies"
+          "id": "pdp",
+          "title": "PDP",
+          "icon": "media/pdp.svg"
         }
       ]
+    },
+    "views": {
+      "pdp": [
+        {
+          "id": "pdp.tasks",
+          "name": "Tasks"
+        },
+        {
+          "id": "pdp.remote",
+          "name": "Remote & Processes"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "pdp.tasks",
+        "when": "!pdp.hasProject",
+        "contents": "No pdp project in this workspace.\n[Init project](command:pdp.init)\nTo learn more about pdp, [read the docs](https://github.com/scienceandhumanitylab/pdp)."
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "pdp.runAll",
+          "when": "view == pdp.tasks",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pdp.graph",
+          "when": "view == pdp.tasks",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pdp.create",
+          "when": "view == pdp.tasks",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pdp.refresh",
+          "when": "view == pdp.tasks",
+          "group": "navigation@4"
+        },
+        {
+          "command": "pdp.runPick",
+          "when": "view == pdp.tasks",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "pdp.scaffold",
+          "when": "view == pdp.tasks",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "pdp.validate",
+          "when": "view == pdp.tasks",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "pdp.init",
+          "when": "view == pdp.tasks",
+          "group": "2_project@1"
+        },
+        {
+          "command": "pdp.cleanAll",
+          "when": "view == pdp.tasks",
+          "group": "3_clean@1"
+        },
+        {
+          "command": "pdp.dagsterLocal",
+          "when": "view == pdp.remote",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pdp.remoteStart",
+          "when": "view == pdp.remote",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pdp.remoteRefresh",
+          "when": "view == pdp.remote",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pdp.dagsterSlurm",
+          "when": "view == pdp.remote",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "pdp.remoteRunAll",
+          "when": "view == pdp.remote",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "pdp.remotePush",
+          "when": "view == pdp.remote",
+          "group": "2_remote@1"
+        },
+        {
+          "command": "pdp.remotePull",
+          "when": "view == pdp.remote",
+          "group": "2_remote@2"
+        },
+        {
+          "command": "pdp.remoteStop",
+          "when": "view == pdp.remote",
+          "group": "3_stop@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pdp.runTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "inline@1"
+        },
+        {
+          "command": "pdp.cleanTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "inline@2"
+        },
+        {
+          "command": "pdp.runOnly",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "1_run@1"
+        },
+        {
+          "command": "pdp.runFrom",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "1_run@2"
+        },
+        {
+          "command": "pdp.runForce",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "1_run@3"
+        },
+        {
+          "command": "pdp.runSlurm",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "1_run@4"
+        },
+        {
+          "command": "pdp.remoteRunTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "2_remote@1"
+        },
+        {
+          "command": "pdp.openTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "3_open@1"
+        },
+        {
+          "command": "pdp.revealTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "3_open@2"
+        },
+        {
+          "command": "pdp.openDagsterUi",
+          "when": "view == pdp.remote && viewItem == process",
+          "group": "inline@1"
+        },
+        {
+          "command": "pdp.stopProcess",
+          "when": "view == pdp.remote && viewItem == process",
+          "group": "inline@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PDP",
+      "properties": {
+        "pdp.path": {
+          "type": "string",
+          "default": "pdp",
+          "markdownDescription": "Path to the `pdp` binary. Defaults to `pdp` on your PATH. Needs pdp ≥ 0.2.4 (`--json` support)."
+        },
+        "pdp.dagsterPort": {
+          "type": "number",
+          "default": 3000,
+          "description": "Port for the local Dagster UI started by PDP: Start Dagster."
+        }
+      }
     }
   },
   "scripts": {
