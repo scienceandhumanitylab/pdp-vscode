@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { mermaidDefinition, PdpGraphPanel } from "../graph";
+import { graphView } from "../extension";
+import { mermaidDefinition } from "../graphView";
 import { parseStatus } from "../pdp";
 
 const status = parseStatus(
@@ -36,9 +37,9 @@ const status = parseStatus(
 );
 
 suite("graph", () => {
-  test("mermaid definition is a left-to-right flowchart", () => {
+  test("mermaid definition is a top-to-bottom flowchart", () => {
     const def = mermaidDefinition(status);
-    assert.ok(def.startsWith("flowchart LR"));
+    assert.ok(def.startsWith("flowchart TD"));
     assert.match(def, /classDef stale/);
     assert.match(def, /classDef fresh/);
   });
@@ -77,17 +78,19 @@ suite("graph", () => {
     assert.doesNotMatch(def, /-->/);
   });
 
-  test("webview renders the graph with mermaid", async () => {
+  test("graph view renders the graph with mermaid", async () => {
     const ext = vscode.extensions.getExtension("scienceandhumanitylab.pdp");
     assert.ok(ext, "extension not found");
-    const panel = PdpGraphPanel.show(ext.extensionUri, status, () => undefined);
+    await ext.activate();
+    await vscode.commands.executeCommand("pdp.graph.focus");
+    assert.ok(graphView, "graph view not registered");
+    graphView.update(status);
     const rendered = await Promise.race([
-      panel.rendered,
+      graphView.rendered,
       new Promise<boolean>((resolve) =>
         setTimeout(() => resolve(false), 15000),
       ),
     ]);
-    panel.dispose();
-    assert.ok(rendered, "webview did not render the graph in time");
+    assert.ok(rendered, "webview view did not render the graph in time");
   }).timeout(20000);
 });

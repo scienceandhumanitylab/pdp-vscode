@@ -46,4 +46,21 @@ suite("fixture integration", () => {
     const status = await pdp.status();
     assert.ok(status.tasks.every((task) => task.stale));
   });
+
+  test("run to a task includes its stale upstream; run only refuses", async () => {
+    await pdp.exec(["clean"]);
+    const only = await pdp.spawnPdp(["run", "clean", "--only"]).done;
+    assert.notStrictEqual(only.code, 0);
+
+    const to = await pdp.spawnPdp(["run", "--to", "clean"]).done;
+    assert.strictEqual(to.code, 0);
+    const report = pdp.reportFromOutput(to.stdout, to.stderr);
+    assert.deepStrictEqual(report.ran, ["fetch", "clean"]);
+
+    const status = await pdp.status();
+    assert.strictEqual(
+      status.tasks.find((task) => task.id === "report")?.stale,
+      true,
+    );
+  });
 });

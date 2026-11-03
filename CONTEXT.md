@@ -80,7 +80,7 @@ _Avoid_: Task tree (the `pdp tree` output), explorer.
 The sidebar list showing the Remote status and the Background processes.
 _Avoid_: Cluster view, Slurm view.
 
-**Graph**:
-The drawn dependency graph of all tasks, each marked stale or fresh. Clicking
-a task opens its `task.yml`.
+**Graph view**:
+The sidebar view that draws the dependency graph of all tasks, top to bottom,
+each marked stale or fresh. Clicking a task opens its `task.yml`.
 _Avoid_: Tree, DAG view, diagram.

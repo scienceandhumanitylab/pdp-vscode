@@ -62,6 +62,10 @@
         "title": "PDP: Run Only This Task"
       },
       {
+        "command": "pdp.runTo",
+        "title": "PDP: Run To Here"
+      },
+      {
         "command": "pdp.runFrom",
         "title": "PDP: Run From Here"
       },
@@ -90,11 +94,6 @@
       {
         "command": "pdp.revealTask",
         "title": "PDP: Reveal Task Folder"
-      },
-      {
-        "command": "pdp.graph",
-        "title": "PDP: Show Graph",
-        "icon": "$(type-hierarchy)"
       },
       {
         "command": "pdp.dagsterLocal",
@@ -162,6 +161,11 @@
           "name": "Tasks"
         },
         {
+          "type": "webview",
+          "id": "pdp.graph",
+          "name": "Graph"
+        },
+        {
           "id": "pdp.remote",
           "name": "Remote & Processes"
         }
@@ -182,19 +186,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "pdp.graph",
+          "command": "pdp.create",
           "when": "view == pdp.tasks",
           "group": "navigation@2"
         },
         {
-          "command": "pdp.create",
-          "when": "view == pdp.tasks",
-          "group": "navigation@3"
-        },
-        {
           "command": "pdp.refresh",
           "when": "view == pdp.tasks",
-          "group": "navigation@4"
+          "group": "navigation@3"
         },
         {
           "command": "pdp.runPick",
@@ -279,19 +278,24 @@
           "group": "1_run@1"
         },
         {
-          "command": "pdp.runFrom",
+          "command": "pdp.runTo",
           "when": "view == pdp.tasks && viewItem == task",
           "group": "1_run@2"
         },
         {
-          "command": "pdp.runForce",
+          "command": "pdp.runFrom",
           "when": "view == pdp.tasks && viewItem == task",
           "group": "1_run@3"
         },
         {
-          "command": "pdp.runSlurm",
+          "command": "pdp.runForce",
           "when": "view == pdp.tasks && viewItem == task",
           "group": "1_run@4"
+        },
+        {
+          "command": "pdp.runSlurm",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "1_run@5"
         },
         {
           "command": "pdp.remoteRunTask",
@@ -307,6 +311,11 @@
           "command": "pdp.revealTask",
           "when": "view == pdp.tasks && viewItem == task",
           "group": "3_open@2"
+        },
+        {
+          "command": "pdp.cleanTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "4_clean@1"
         },
         {
           "command": "pdp.openDagsterUi",

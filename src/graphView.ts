@@ -7,7 +7,7 @@ import type { ProjectStatus } from "./pdp";
 export function mermaidDefinition(status: ProjectStatus): string {
   const index = new Map(status.tasks.map((task, i) => [task.id, i]));
   const lines = [
-    "flowchart LR",
+    "flowchart TD",
     "classDef stale fill:#f6d18b,stroke:#7a5b16,color:#111111",
     "classDef fresh fill:#cbe6c0,stroke:#2e5c3a,color:#111111",
   ];
@@ -79,8 +79,10 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
 </html>`;
 }
 
-export class PdpGraphPanel {
-  private readonly panel: vscode.WebviewPanel;
+// A sidebar WebviewView: VS Code disposes it when hidden and calls
+// resolveWebviewView again on re-show, so status is stored and pushed on "ready".
+export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
+  private view: vscode.WebviewView | null = null;
   private status: ProjectStatus | null = null;
   private readonly onOpenTask: (id: string) => void;
   private readonly themeListener: vscode.Disposable;
@@ -88,38 +90,36 @@ export class PdpGraphPanel {
   /** Resolves true once the webview has rendered a graph (test hook). */
   readonly rendered: Promise<boolean>;
 
-  private constructor(
-    extensionUri: vscode.Uri,
+  constructor(
+    private readonly extensionUri: vscode.Uri,
     onOpenTask: (id: string) => void,
   ) {
     this.onOpenTask = onOpenTask;
     this.rendered = new Promise<boolean>((resolve) => {
       this.renderedResolve = resolve;
     });
-    this.panel = vscode.window.createWebviewPanel(
-      "pdp.graph",
-      "PDP Graph",
-      vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, "media")],
-      },
-    );
-    this.panel.onDidDispose(() => this.dispose());
     this.themeListener = vscode.window.onDidChangeActiveColorTheme(() =>
       this.push(),
     );
+  }
+
+  resolveWebviewView(view: vscode.WebviewView): void {
+    this.view = view;
+    view.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "media")],
+    };
     const nonce = randomBytes(24).toString("hex");
-    this.panel.webview.html = html(
-      this.panel.webview,
+    view.webview.html = html(
+      view.webview,
       nonce,
-      this.panel.webview
+      view.webview
         .asWebviewUri(
-          vscode.Uri.joinPath(extensionUri, "media", "mermaid.min.js"),
+          vscode.Uri.joinPath(this.extensionUri, "media", "mermaid.min.js"),
         )
         .toString(),
     );
-    this.panel.webview.onDidReceiveMessage((message) => {
+    view.webview.onDidReceiveMessage((message) => {
       if (message.type === "ready") {
         this.status ? this.push() : this.pushEmpty();
       }
@@ -133,26 +133,18 @@ export class PdpGraphPanel {
         }
       }
     });
+    view.onDidDispose(() => {
+      if (this.view === view) {
+        this.view = null;
+      }
+    });
   }
 
-  static show(
-    extensionUri: vscode.Uri,
-    status: ProjectStatus | null,
-    onOpenTask: (id: string) => void,
-  ): PdpGraphPanel {
-    if (activePanel) {
-      activePanel.panel.reveal();
-      activePanel.render(status);
-      return activePanel;
-    }
-    const panel = new PdpGraphPanel(extensionUri, onOpenTask);
-    activePanel = panel;
-    panel.render(status);
-    return panel;
-  }
-
-  render(status: ProjectStatus | null): void {
+  update(status: ProjectStatus | null): void {
     this.status = status;
+    if (!this.view) {
+      return;
+    }
     if (this.status) {
       this.push();
     } else {
@@ -161,22 +153,22 @@ export class PdpGraphPanel {
   }
 
   private pushEmpty(): void {
-    void this.panel.webview.postMessage({
+    void this.view?.webview.postMessage({
       type: "empty",
       message:
-        "No pdp project in this workspace. Open a workspace with a pdp.yml, then run PDP: Show Graph.",
+        "No pdp project in this workspace. Open a workspace with a pdp.yml, then refresh.",
     });
   }
 
   private push(): void {
-    if (!this.status) {
+    if (!this.status || !this.view) {
       return;
     }
     const dark =
       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
       vscode.window.activeColorTheme.kind ===
         vscode.ColorThemeKind.HighContrast;
-    void this.panel.webview.postMessage({
+    void this.view.webview.postMessage({
       type: "render",
       def: mermaidDefinition(this.status),
       dark,
@@ -184,14 +176,6 @@ export class PdpGraphPanel {
   }
 
   dispose(): void {
-    activePanel = null;
     this.themeListener.dispose();
-    this.panel.dispose();
   }
-}
-
-let activePanel: PdpGraphPanel | null = null;
-
-export function renderGraphIfOpen(status: ProjectStatus | null): void {
-  activePanel?.render(status);
 }

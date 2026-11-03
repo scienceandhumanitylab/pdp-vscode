@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "./pdp";
-import { PdpGraphPanel, renderGraphIfOpen } from "./graph";
+import { PdpGraphViewProvider } from "./graphView";
 import { ProcessRegistry, type TrackedProcess } from "./processes";
 import { ProcessItem, PdpRemoteProvider } from "./remoteView";
 import { PdpTasksProvider, TaskItem } from "./tasksView";
@@ -10,6 +10,7 @@ import { PdpTasksProvider, TaskItem } from "./tasksView";
 const tasksProvider = new PdpTasksProvider();
 const processes = new ProcessRegistry();
 const remoteProvider = new PdpRemoteProvider(processes);
+export let graphView: PdpGraphViewProvider | null = null;
 let lastStatus: pdp.ProjectStatus | null = null;
 let refreshing: Promise<pdp.ProjectStatus | null> | null = null;
 let refreshQueued = false;
@@ -19,14 +20,20 @@ const statusBar = vscode.window.createStatusBarItem(
 );
 
 export function activate(context: vscode.ExtensionContext): void {
+  graphView = new PdpGraphViewProvider(
+    context.extensionUri,
+    (id) => void openTaskYml(id),
+  );
   context.subscriptions.push(
-    ...registerCommands(context.extensionUri),
+    ...registerCommands(),
     vscode.window.createTreeView("pdp.tasks", {
       treeDataProvider: tasksProvider,
     }),
     vscode.window.createTreeView("pdp.remote", {
       treeDataProvider: remoteProvider,
     }),
+    vscode.window.registerWebviewViewProvider("pdp.graph", graphView),
+    graphView,
     statusBar,
     ...createWatchers(),
   );
@@ -110,7 +117,7 @@ async function doRefresh(
   if (!hasProject) {
     lastStatus = null;
     tasksProvider.update(null);
-    renderGraphIfOpen(null);
+    graphView?.update(null);
     statusBar.hide();
     return null;
   }
@@ -118,7 +125,7 @@ async function doRefresh(
     const status = await pdp.status();
     lastStatus = status;
     tasksProvider.update(status);
-    renderGraphIfOpen(status);
+    graphView?.update(status);
     const stale = status.tasks.filter((task) => task.stale).length;
     statusBar.text = `$(play) PDP: ${stale} stale`;
     statusBar.tooltip = `${stale} of ${status.tasks.length} tasks are stale. Click to run the stale tasks.`;
@@ -141,17 +148,12 @@ async function doRefresh(
   }
 }
 
-function registerCommands(extensionUri: vscode.Uri): vscode.Disposable[] {
+function registerCommands(): vscode.Disposable[] {
   const register = (id: string, handler: (...args: unknown[]) => unknown) =>
     vscode.commands.registerCommand(id, handler);
 
   return [
     register("pdp.refresh", () => refresh(true)),
-
-    register("pdp.graph", async () => {
-      const status = lastStatus ?? (await refresh(true));
-      PdpGraphPanel.show(extensionUri, status, (id) => void openTaskYml(id));
-    }),
 
     register("pdp.runAll", () => runWithProgress([], "PDP: Run all")),
     register("pdp.runPick", runPick),
@@ -162,6 +164,9 @@ function registerCommands(extensionUri: vscode.Uri): vscode.Disposable[] {
       withTask(arg, (id) =>
         runWithProgress([id, "--only"], `PDP: Run only ${id}`),
       ),
+    ),
+    register("pdp.runTo", (arg) =>
+      withTask(arg, (id) => runWithProgress(["--to", id], `PDP: Run to ${id}`)),
     ),
     register("pdp.runFrom", (arg) =>
       withTask(arg, (id) =>

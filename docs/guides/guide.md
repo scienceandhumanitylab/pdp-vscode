@@ -72,12 +72,14 @@ error notifications have a **Show Output** button.
 Everything is in the command palette as **PDP: …**; the frequent ones are
 also buttons on the views.
 
-**Tasks view title:** Run all (stale) `▶`, Show graph, Create task, Refresh,
-plus Run…, Scaffold, Validate, Init project and Clean all under `…`.
+**Tasks view title:** Run all (stale) `▶`, Create task, Refresh, plus Run…,
+Scaffold, Validate, Init project and Clean all under `…`.
 
-**On a task** (inline or right-click): Run, Clean, Run only this task, Run
-from here, Force run, Run on Slurm, Remote run, Open task.yml, Reveal task
-folder.
+**On a task** (inline or right-click): Run, Clean, Run only this task, Run to
+here, Run from here, Force run, Run on Slurm, Remote run, Open task.yml,
+Reveal task folder, Clean task. **Run to here** runs the task and everything
+upstream of it, so it works even when an upstream task is stale — which
+**Run only this task** refuses.
 
 **Run…** asks for tasks (multi-select) and then options (Only, Force, Slurm,
 runner).
@@ -90,10 +92,11 @@ interrupts pdp _and_ its whole task tree (same as Ctrl-C in a terminal).
 
 ## The graph
 
-**Show graph** opens a webview with a Mermaid flowchart of `depends_on`.
-Nodes are labelled and coloured stale/fresh, the diagram re-renders on every
-refresh and follows your colour theme. Click a node to open that task's
-`task.yml`.
+The **Graph view** sits under Tasks in the PDP sidebar and draws a
+top-to-bottom Mermaid flowchart of `depends_on`, so long pipelines use the
+vertical space well. Nodes are labelled and coloured stale/fresh, the diagram
+re-renders on every refresh and follows your colour theme. Click a node to
+open that task's `task.yml`.
 
 ## Dagster and the cluster
 
