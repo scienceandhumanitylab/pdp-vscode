@@ -121,12 +121,51 @@ export async function status(): Promise<ProjectStatus> {
   return parseStatus(res.stdout);
 }
 
+export interface RemoteRunLast {
+  finished?: string;
+  ran?: string[];
+  failed?: string[];
+  no_entrypoint?: string[];
+  exit_code?: number;
+}
+
+export interface RemoteStatus {
+  host: string;
+  path: string;
+  port: string;
+  version: string;
+  pushed: boolean;
+  session: { name: string; running: boolean };
+  run: { running: boolean; last: RemoteRunLast | null };
+  dagster_listening: boolean;
+  jobs: string[] | null;
+}
+
+export function parseRemoteStatus(text: string): RemoteStatus {
+  const parsed = JSON.parse(text) as RemoteStatus;
+  if (!parsed || typeof parsed.host !== "string" || !parsed.session) {
+    throw new Error("Unexpected pdp remote status JSON");
+  }
+  return parsed;
+}
+
+export async function remoteStatus(): Promise<RemoteStatus> {
+  const res = await exec(["remote", "status", "--json"]);
+  if (res.code !== 0) {
+    throw new Error(res.stderr.trim() || "pdp remote status failed");
+  }
+  return parseRemoteStatus(res.stdout);
+}
+
 export interface SpawnedPdp {
   done: Promise<ExecResult>;
   kill: (signal?: NodeJS.Signals) => void;
 }
 
-export function spawnPdp(args: string[]): SpawnedPdp {
+export function spawnPdp(
+  args: string[],
+  onOutput?: (chunk: string) => void,
+): SpawnedPdp {
   const root = workspaceRoot();
   if (!root) {
     return {
@@ -147,10 +186,12 @@ export function spawnPdp(args: string[]): SpawnedPdp {
   child.stdout?.on("data", (data: Buffer) => {
     stdout += data.toString();
     channel.append(data.toString());
+    onOutput?.(data.toString());
   });
   child.stderr?.on("data", (data: Buffer) => {
     stderr += data.toString();
     channel.append(data.toString());
+    onOutput?.(data.toString());
   });
   const done = new Promise<ExecResult>((resolve, reject) => {
     child.on("error", (err: NodeJS.ErrnoException) => {

@@ -2,29 +2,15 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "./pdp";
+import { ProcessRegistry, type TrackedProcess } from "./processes";
+import { ProcessItem, PdpRemoteProvider } from "./remoteView";
 import { PdpTasksProvider, TaskItem } from "./tasksView";
 
-const notYetImplemented = [
-  "pdp.graph",
-  "pdp.dagsterLocal",
-  "pdp.dagsterSlurm",
-  "pdp.remoteStart",
-  "pdp.remoteRunAll",
-  "pdp.remoteRunTask",
-  "pdp.remotePush",
-  "pdp.remotePull",
-  "pdp.remoteStop",
-  "pdp.remoteRefresh",
-  "pdp.openDagsterUi",
-  "pdp.stopProcess",
-];
-
-const emptyTree: vscode.TreeDataProvider<vscode.TreeItem> = {
-  getTreeItem: (item) => item,
-  getChildren: () => [],
-};
+const notYetImplemented = ["pdp.graph"];
 
 const tasksProvider = new PdpTasksProvider();
+const processes = new ProcessRegistry();
+const remoteProvider = new PdpRemoteProvider(processes);
 let lastStatus: pdp.ProjectStatus | null = null;
 let refreshing: Promise<void> | null = null;
 let refreshQueued = false;
@@ -46,7 +32,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.createTreeView("pdp.tasks", {
       treeDataProvider: tasksProvider,
     }),
-    vscode.window.createTreeView("pdp.remote", { treeDataProvider: emptyTree }),
+    vscode.window.createTreeView("pdp.remote", {
+      treeDataProvider: remoteProvider,
+    }),
     statusBar,
     ...createWatchers(),
   );
@@ -56,7 +44,9 @@ export function activate(context: vscode.ExtensionContext): void {
   void refresh();
 }
 
-export function deactivate(): void {}
+export function deactivate(): void {
+  processes.stopAll();
+}
 
 export function hasPdpProject(): boolean {
   const root = pdp.workspaceRoot();
@@ -199,7 +189,92 @@ function registerCommands(): vscode.Disposable[] {
 
     register("pdp.openTask", (arg) => withTask(arg, openTaskYml)),
     register("pdp.revealTask", (arg) => withTask(arg, revealTaskFolder)),
+
+    register("pdp.dagsterLocal", () => startDagster(false)),
+    register("pdp.dagsterSlurm", () => startDagster(true)),
+    register("pdp.remoteStart", () =>
+      processes.start("remote-tunnel", "Remote (tunnel)", ["remote", "start"]),
+    ),
+    register("pdp.remoteRefresh", () => refreshRemote()),
+    register("pdp.remoteRunAll", () =>
+      remoteCommand(["remote", "run"], "PDP: Remote run all", true),
+    ),
+    register("pdp.remoteRunTask", (arg) =>
+      withTask(arg, (id) =>
+        remoteCommand(["remote", "run", id], `PDP: Remote run ${id}`, true),
+      ),
+    ),
+    register("pdp.remotePush", () =>
+      remoteCommand(["remote", "push"], "PDP: Remote push", false),
+    ),
+    register("pdp.remotePull", () =>
+      remoteCommand(["remote", "pull"], "PDP: Remote pull", false),
+    ),
+    register("pdp.remoteStop", () =>
+      remoteCommand(["remote", "stop"], "PDP: Remote stop", false).then(() =>
+        processes.stop("remote-tunnel"),
+      ),
+    ),
+    register("pdp.openDagsterUi", async (arg) => {
+      const process = await processFromArgOrPick(arg);
+      if (process) {
+        processes.openUi(process);
+      }
+    }),
+    register("pdp.stopProcess", async (arg) => {
+      const process = await processFromArgOrPick(arg);
+      if (process) {
+        processes.stop(process.id);
+      }
+    }),
   ];
+}
+
+function startDagster(slurm: boolean): void {
+  const port =
+    vscode.workspace.getConfiguration("pdp").get<number>("dagsterPort") ?? 3000;
+  const args = ["dagster", "dev"];
+  if (slurm) {
+    args.push("--slurm");
+  }
+  args.push("-p", String(port));
+  processes.start(
+    slurm ? "dagster-slurm" : "dagster-local",
+    slurm ? "Dagster (Slurm)" : "Dagster (local)",
+    args,
+  );
+}
+
+async function refreshRemote(): Promise<void> {
+  try {
+    remoteProvider.update(await pdp.remoteStatus());
+  } catch (err) {
+    const message = (err as Error).message;
+    remoteProvider.update(null, message);
+    await showError(message);
+  }
+}
+
+async function processFromArgOrPick(
+  arg: unknown,
+): Promise<TrackedProcess | undefined> {
+  if (arg instanceof ProcessItem) {
+    return arg.process;
+  }
+  const list = processes.list();
+  if (!list.length) {
+    vscode.window.showInformationMessage("PDP: No background processes");
+    return undefined;
+  }
+  const picked = await vscode.window.showQuickPick(
+    list.map((process) => ({
+      label: process.label,
+      description: process.url ?? "starting…",
+      process,
+    })),
+    { placeHolder: "Choose a process" },
+  );
+  return picked?.process;
 }
 
 async function initProject(): Promise<void> {
@@ -249,32 +324,63 @@ interface RunResult {
   cancelled: boolean;
 }
 
-async function runWithProgress(args: string[], title: string): Promise<void> {
+async function spawnWithProgress(
+  args: string[],
+  title: string,
+): Promise<RunResult> {
   let child: pdp.SpawnedPdp | null = null;
   let cancelled = false;
+  return vscode.window.withProgress<RunResult>(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title,
+      cancellable: true,
+    },
+    async (_progress, token) => {
+      child = pdp.spawnPdp(args);
+      token.onCancellationRequested(() => {
+        cancelled = true;
+        child?.kill("SIGINT");
+      });
+      const res = await child.done;
+      return {
+        code: res.code,
+        report: pdp.reportFromOutput(res.stdout, res.stderr),
+        cancelled,
+      };
+    },
+  );
+}
+
+async function runWithProgress(args: string[], title: string): Promise<void> {
+  await commandWithProgress(["run", ...args], title, true);
+}
+
+async function remoteCommand(
+  args: string[],
+  title: string,
+  useReport: boolean,
+): Promise<void> {
+  await commandWithProgress(args, title, useReport);
+}
+
+async function commandWithProgress(
+  args: string[],
+  title: string,
+  useReport: boolean,
+): Promise<void> {
   try {
-    const result = await vscode.window.withProgress<RunResult>(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title,
-        cancellable: true,
-      },
-      async (_progress, token) => {
-        child = pdp.spawnPdp(["run", ...args]);
-        token.onCancellationRequested(() => {
-          cancelled = true;
-          child?.kill("SIGINT");
-        });
-        const res = await child.done;
-        return {
-          code: res.code,
-          report: pdp.reportFromOutput(res.stdout, res.stderr),
-          cancelled,
-        };
-      },
-    );
+    const result = await spawnWithProgress(args, title);
     await refresh();
-    notifyRunResult(title, result);
+    if (useReport) {
+      notifyRunResult(title, result);
+    } else if (result.code !== 0) {
+      await showError(`${title} failed (exit ${result.code})`);
+    } else if (result.cancelled) {
+      vscode.window.showWarningMessage(`${title}: cancelled`);
+    } else {
+      vscode.window.showInformationMessage(`${title}: done`);
+    }
   } catch (err) {
     await refresh();
     await showError((err as Error).message);
