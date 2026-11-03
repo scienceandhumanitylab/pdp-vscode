@@ -334,8 +334,8 @@
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "node scripts/copy-mermaid.mjs && tsc -p ./",
+    "watch": "node scripts/copy-mermaid.mjs && tsc -watch -p ./",
     "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
@@ -347,6 +347,7 @@
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.5.0",
+    "mermaid": "^12.2.0",
     "prettier": "3.9.10",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.1"

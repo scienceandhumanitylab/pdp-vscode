@@ -2,17 +2,16 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "./pdp";
+import { PdpGraphPanel, renderGraphIfOpen } from "./graph";
 import { ProcessRegistry, type TrackedProcess } from "./processes";
 import { ProcessItem, PdpRemoteProvider } from "./remoteView";
 import { PdpTasksProvider, TaskItem } from "./tasksView";
-
-const notYetImplemented = ["pdp.graph"];
 
 const tasksProvider = new PdpTasksProvider();
 const processes = new ProcessRegistry();
 const remoteProvider = new PdpRemoteProvider(processes);
 let lastStatus: pdp.ProjectStatus | null = null;
-let refreshing: Promise<void> | null = null;
+let refreshing: Promise<pdp.ProjectStatus | null> | null = null;
 let refreshQueued = false;
 let queuedNotify = false;
 const statusBar = vscode.window.createStatusBarItem(
@@ -21,14 +20,7 @@ const statusBar = vscode.window.createStatusBarItem(
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    ...notYetImplemented.map((id) =>
-      vscode.commands.registerCommand(id, () => {
-        vscode.window.showInformationMessage(
-          `PDP: ${id.replace("pdp.", "")} is not implemented yet.`,
-        );
-      }),
-    ),
-    ...registerCommands(),
+    ...registerCommands(context.extensionUri),
     vscode.window.createTreeView("pdp.tasks", {
       treeDataProvider: tasksProvider,
     }),
@@ -88,7 +80,7 @@ function createWatchers(): vscode.Disposable[] {
 }
 
 // One status call in flight; later requests coalesce into one re-run.
-function refresh(notifyOnError = false): Promise<void> {
+function refresh(notifyOnError = false): Promise<pdp.ProjectStatus | null> {
   if (refreshing) {
     refreshQueued = true;
     queuedNotify = queuedNotify || notifyOnError;
@@ -106,7 +98,9 @@ function refresh(notifyOnError = false): Promise<void> {
   return refreshing;
 }
 
-async function doRefresh(notifyOnError: boolean): Promise<void> {
+async function doRefresh(
+  notifyOnError: boolean,
+): Promise<pdp.ProjectStatus | null> {
   const hasProject = hasPdpProject();
   void vscode.commands.executeCommand(
     "setContext",
@@ -116,18 +110,21 @@ async function doRefresh(notifyOnError: boolean): Promise<void> {
   if (!hasProject) {
     lastStatus = null;
     tasksProvider.update(null);
+    renderGraphIfOpen(null);
     statusBar.hide();
-    return;
+    return null;
   }
   try {
     const status = await pdp.status();
     lastStatus = status;
     tasksProvider.update(status);
+    renderGraphIfOpen(status);
     const stale = status.tasks.filter((task) => task.stale).length;
     statusBar.text = `$(play) PDP: ${stale} stale`;
     statusBar.tooltip = `${stale} of ${status.tasks.length} tasks are stale. Click to run the stale tasks.`;
     statusBar.backgroundColor = undefined;
     statusBar.show();
+    return status;
   } catch (err) {
     lastStatus = null;
     tasksProvider.update(null);
@@ -140,15 +137,21 @@ async function doRefresh(notifyOnError: boolean): Promise<void> {
     if (notifyOnError) {
       vscode.window.showErrorMessage(`PDP: ${(err as Error).message}`);
     }
+    return null;
   }
 }
 
-function registerCommands(): vscode.Disposable[] {
+function registerCommands(extensionUri: vscode.Uri): vscode.Disposable[] {
   const register = (id: string, handler: (...args: unknown[]) => unknown) =>
     vscode.commands.registerCommand(id, handler);
 
   return [
     register("pdp.refresh", () => refresh(true)),
+
+    register("pdp.graph", async () => {
+      const status = lastStatus ?? (await refresh(true));
+      PdpGraphPanel.show(extensionUri, status, (id) => void openTaskYml(id));
+    }),
 
     register("pdp.runAll", () => runWithProgress([], "PDP: Run all")),
     register("pdp.runPick", runPick),
