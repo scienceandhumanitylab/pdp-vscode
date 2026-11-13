@@ -1,6 +1,10 @@
+> Warning: This is a nearly 100% vibe-coded app. Or AI-engineered, depending on your preferences.
+
 # pdp-vscode
 
 Yes, but will it VScode?
+
+This is a VScode implementation of the [pdp library](https://github.com/scienceandhumanitylab/pdp). Work in progress. Not yet available on VScode marketplace.
 
 ## Development
 
