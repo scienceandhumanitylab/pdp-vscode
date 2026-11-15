@@ -35,3 +35,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   changes.
 - Keyboard chords: `Alt+P P` Tasks, `Alt+P G` Graph, `Alt+P R` Remote,
   `Alt+P Space` run all stale (not while the terminal has focus).
+- The graph is drawn with Cytoscape instead of Mermaid: nodes can be dragged
+  and their positions are remembered per project; the canvas pans and zooms,
+  and the extension ships one 0.4 MB script instead of a 5.2 MB one. Hovering
+  a node still shows its full state; click and right-click work as before.
+- The graph keeps your arrangement and zoom/pan across runs and refreshes;
+  zoom is capped at 150% and also available from title-bar buttons. A layout
+  picker on the title bar switches between top-down, left-right and
+  force-directed, and **Reset Graph Layout** clears your arrangement back to
+  the chosen layout.

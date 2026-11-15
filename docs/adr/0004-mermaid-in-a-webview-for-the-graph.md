@@ -1,5 +1,7 @@
 # The Graph is drawn with Mermaid in a webview, shipped with the extension
 
+> Superseded by ADR 0005 (Cytoscape: users can drag nodes).
+
 The Graph is a webview that renders a Mermaid `flowchart` built from the Task
 status. Mermaid's single `dist/mermaid.min.js` is copied into `media/` at
 build time and loaded from there, so the Graph works offline and no CDN is

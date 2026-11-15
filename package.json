@@ -100,6 +100,26 @@
         "title": "PDP: Reveal Task Folder"
       },
       {
+        "command": "pdp.resetGraphLayout",
+        "title": "PDP: Reset Graph Layout",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "pdp.graphZoomIn",
+        "title": "PDP: Graph Zoom In",
+        "icon": "$(zoom-in)"
+      },
+      {
+        "command": "pdp.graphZoomOut",
+        "title": "PDP: Graph Zoom Out",
+        "icon": "$(zoom-out)"
+      },
+      {
+        "command": "pdp.graphChooseLayout",
+        "title": "PDP: Choose Graph Layout…",
+        "icon": "$(layout)"
+      },
+      {
         "command": "pdp.dagsterLocal",
         "title": "PDP: Start Dagster (Local)",
         "icon": "$(rocket)"
@@ -263,6 +283,26 @@
           "command": "pdp.remoteStop",
           "when": "view == pdp.remote",
           "group": "3_stop@1"
+        },
+        {
+          "command": "pdp.graphZoomIn",
+          "when": "view == pdp.graph",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pdp.graphZoomOut",
+          "when": "view == pdp.graph",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pdp.graphChooseLayout",
+          "when": "view == pdp.graph",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pdp.resetGraphLayout",
+          "when": "view == pdp.graph",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -383,8 +423,8 @@
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
-    "compile": "node scripts/copy-mermaid.mjs && tsc -p ./",
-    "watch": "node scripts/copy-mermaid.mjs && tsc -watch -p ./",
+    "compile": "node scripts/copy-cytoscape.mjs && tsc -p ./",
+    "watch": "node scripts/copy-cytoscape.mjs && tsc -watch -p ./",
     "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
@@ -396,8 +436,8 @@
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "@vscode/vsce": "^4.1.0",
+    "cytoscape": "^3.35.0",
     "eslint": "^10.5.0",
-    "mermaid": "^12.2.0",
     "prettier": "3.9.10",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.1"

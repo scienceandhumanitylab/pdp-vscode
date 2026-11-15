@@ -4,7 +4,7 @@ node_modules
 .vscode-test/
 *.vsix
 *.swp
-media/mermaid.min.js
+media/cytoscape.min.js
 src/test/fixtures/**/output/
 src/test/fixtures/**/input/
 # written by the test host when it opens the fixture as a workspace

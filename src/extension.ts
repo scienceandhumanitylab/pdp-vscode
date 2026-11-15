@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "./pdp";
-import { PdpGraphViewProvider } from "./graphView";
+import { GRAPH_LAYOUTS, PdpGraphViewProvider } from "./graphView";
 import { ProcessRegistry, type TrackedProcess } from "./processes";
 import { ProcessItem, PdpRemoteProvider } from "./remoteView";
 import {
@@ -28,6 +28,7 @@ const statusBar = vscode.window.createStatusBarItem(
 export function activate(context: vscode.ExtensionContext): void {
   graphView = new PdpGraphViewProvider(
     context.extensionUri,
+    context.workspaceState,
     (id) => void openTaskYml(id),
     (id) => void taskMenu(id),
   );
@@ -209,6 +210,10 @@ function registerCommands(): vscode.Disposable[] {
 
     register("pdp.openTask", (arg) => withTask(arg, openTaskYml)),
     register("pdp.revealTask", (arg) => withTask(arg, revealTaskFolder)),
+    register("pdp.resetGraphLayout", () => graphView?.resetLayout()),
+    register("pdp.graphZoomIn", () => graphView?.zoomBy(1.25)),
+    register("pdp.graphZoomOut", () => graphView?.zoomBy(1 / 1.25)),
+    register("pdp.graphChooseLayout", chooseGraphLayout),
 
     register("pdp.dagsterLocal", () => startDagster(false)),
     register("pdp.dagsterSlurm", () => startDagster(true)),
@@ -492,6 +497,15 @@ async function taskMenu(id: string): Promise<void> {
   );
   if (picked) {
     await vscode.commands.executeCommand(picked.command, id);
+  }
+}
+
+async function chooseGraphLayout(): Promise<void> {
+  const picked = await vscode.window.showQuickPick(GRAPH_LAYOUTS, {
+    placeHolder: "Graph layout",
+  });
+  if (picked) {
+    await graphView?.chooseLayout(picked.name);
   }
 }
 

@@ -110,12 +110,18 @@ interrupts pdp _and_ its whole task tree (same as Ctrl-C in a terminal).
 
 ## The graph
 
-The **Graph view** sits under Tasks in the PDP sidebar and draws a
-top-to-bottom Mermaid flowchart of `depends_on`, so long pipelines use the
-vertical space well. Nodes are labelled and coloured stale/fresh, the diagram
-re-renders on every refresh and follows your colour theme. Click a node to
-open that task's `task.yml`; right-click it for the task menu (run variants,
-Clean, Open task.yml, Delete…).
+The **Graph view** sits under Tasks in the PDP sidebar and draws the task DAG
+on an interactive canvas. Drag nodes to arrange them and drag the background
+to pan; scroll to zoom (up to 150%), or use the title-bar zoom buttons. Your
+arrangement and view are remembered per project and survive runs and
+refreshes — only adding a task re-lays-out once. The title bar also has a
+layout picker — top-down, left-right or force-directed; picking one re-lays
+the graph out and becomes the project's automatic layout — and **Reset Graph
+Layout**, which clears your arrangement back to that automatic layout. Nodes
+are labelled `task ✗` / `task ✓` and coloured stale/fresh and follow your
+colour theme; hover a node for its full state. Click a node to open that
+task's `task.yml`; right-click it for the task menu (run variants, Clean,
+Open task.yml, Delete…).
 
 ## Dagster and the cluster
 
