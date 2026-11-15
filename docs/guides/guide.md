@@ -57,16 +57,26 @@ Run the tests with `pnpm test`.
 2. The **PDP icon** appears in the activity bar. If there is no `pdp.yml`
    yet, the Tasks view shows an **Init project** button (or run
    **PDP: Init Project** from the command palette) and asks for a name.
-3. The Tasks view lists your tasks in topological order. Each shows a
-   **stale** or **fresh** label with its own icon; expand a task to see its
-   dependencies, entrypoint and Slurm flags. Click a task to open its
-   `task.yml`.
+3. The Tasks view starts with a `pdp.yml` row, then lists your tasks in
+   topological order. Each shows a **stale** or **fresh** label with its own
+   icon; expand a task to see its dependencies, entrypoint and Slurm flags,
+   then its folder's files. Click a task to open its `task.yml`, or a file to
+   open it.
 4. The status bar shows `PDP: N stale` — click it to run all stale tasks.
 
 The view refreshes automatically (file watchers on `input/`, `src/`,
 `output/`, `hand/` and all `.yml`, debounced) and after every command. Every
 pdp invocation and its full output goes to the **Output → PDP** channel;
-error notifications have a **Show Output** button.
+error notifications have a **Show Output** button. Files created in a task
+folder outside those watched paths (e.g. at the task root) need a manual
+**Refresh** to appear in the tree.
+
+If a refresh fails (say, a broken `task.yml`), the sidebar keeps the last good
+status, the status bar shows `PDP` with an error icon, and you get a
+notification whenever the error changes.
+
+If `pdp.yml` lists a task whose folder is gone (deleted by hand, say), the
+extension asks once per session whether to remove those entries.
 
 ## Commands
 
@@ -78,9 +88,16 @@ Scaffold, Validate, Init project and Clean all under `…`.
 
 **On a task** (inline or right-click): Run, Clean, Run only this task, Run to
 here, Run from here, Force run, Run on Slurm, Remote run, Open task.yml,
-Reveal task folder, Clean task. **Run to here** runs the task and everything
-upstream of it, so it works even when an upstream task is stale — which
-**Run only this task** refuses.
+Reveal task folder, Clean task, Delete task…. **Run to here** runs the task
+and everything upstream of it, so it works even when an upstream task is
+stale — which **Run only this task** refuses. **Delete task…** asks first,
+then removes the task's folder and its `pdp.yml` entry (`pdp delete`, so it
+needs a pdp with that command); pdp refuses while another task depends on it.
+
+**Keyboard:** `Alt+P` then `P` focuses Tasks, `G` the Graph, `R` Remote, and
+`Space` runs all stale tasks. The chords are off while the terminal has
+focus. Rebind them under **Keyboard Shortcuts** if `Alt+P` clashes (another
+extension, or `π` on macOS).
 
 **Run…** asks for tasks (multi-select) and then options (Only, Force, Slurm,
 runner).
@@ -97,7 +114,8 @@ The **Graph view** sits under Tasks in the PDP sidebar and draws a
 top-to-bottom Mermaid flowchart of `depends_on`, so long pipelines use the
 vertical space well. Nodes are labelled and coloured stale/fresh, the diagram
 re-renders on every refresh and follows your colour theme. Click a node to
-open that task's `task.yml`.
+open that task's `task.yml`; right-click it for the task menu (run variants,
+Clean, Open task.yml, Delete…).
 
 ## Dagster and the cluster
 

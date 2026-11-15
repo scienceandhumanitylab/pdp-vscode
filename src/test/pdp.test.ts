@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import * as path from "path";
 import * as vscode from "vscode";
 import {
   MIN_PDP_VERSION,
@@ -8,7 +9,12 @@ import {
   reportSummary,
   versionAtLeast,
 } from "../pdp";
-import { PdpTasksProvider, TaskItem } from "../tasksView";
+import {
+  FileItem,
+  missingTaskFolders,
+  PdpTasksProvider,
+  TaskItem,
+} from "../tasksView";
 
 suite("pdp parsing", () => {
   test("versionAtLeast compares 3-part versions", () => {
@@ -154,13 +160,16 @@ suite("tasks view", () => {
     }),
   );
 
-  test("root children are task items in status order", async () => {
+  test("root children are pdp.yml then task items in status order", async () => {
     const provider = new PdpTasksProvider();
     assert.deepStrictEqual(await provider.getChildren(), []);
     provider.update(status);
     const children = await provider.getChildren();
-    assert.strictEqual(children.length, 2);
-    const [fetch, clean] = children as TaskItem[];
+    assert.strictEqual(children.length, 3);
+    const [pdpYml, fetch, clean] = children as [FileItem, TaskItem, TaskItem];
+    assert.ok(pdpYml instanceof FileItem);
+    assert.strictEqual(path.basename(pdpYml.fsPath), "pdp.yml");
+    assert.strictEqual(pdpYml.command?.command, "vscode.open");
     assert.ok(fetch instanceof TaskItem);
     assert.strictEqual(fetch.label, "fetch");
     assert.strictEqual(fetch.description, "stale");
@@ -170,13 +179,13 @@ suite("tasks view", () => {
     assert.strictEqual(clean?.description, "fresh · tidy up");
   });
 
-  test("task children show depends on, entrypoint and slurm", async () => {
+  test("task children start with depends on, entrypoint and slurm", async () => {
     const provider = new PdpTasksProvider();
     provider.update(status);
-    const [, clean] = (await provider.getChildren()) as TaskItem[];
-    const details = (await provider.getChildren(clean)).map(
-      (item) => item.description ?? item.label,
-    );
+    const [, , clean] = (await provider.getChildren()) as TaskItem[];
+    const details = (await provider.getChildren(clean))
+      .filter((item) => !(item instanceof FileItem))
+      .map((item) => item.description ?? item.label);
     assert.deepStrictEqual(details, [
       "depends on: fetch",
       "entrypoint: make",
@@ -184,14 +193,28 @@ suite("tasks view", () => {
     ]);
   });
 
-  test("task without detail has no children and no expand", async () => {
+  test("task without detail or folder has no children and no expand", async () => {
     const provider = new PdpTasksProvider();
     provider.update(status);
-    const [fetch] = (await provider.getChildren()) as TaskItem[];
+    const [, fetch] = (await provider.getChildren()) as TaskItem[];
     assert.strictEqual(
       fetch.collapsibleState,
       vscode.TreeItemCollapsibleState.None,
     );
     assert.deepStrictEqual(await provider.getChildren(fetch), []);
+  });
+
+  test("missingTaskFolders lists tasks without a folder, skipping bad ids", () => {
+    const tasks = ["fetch", "clean", "../escape", "report"].map((id) => ({
+      ...status.tasks[0],
+      id,
+    }));
+    const present = new Set([path.join("/p", "clean")]);
+    assert.deepStrictEqual(
+      missingTaskFolders({ project: "demo", tasks }, "/p", (folder) =>
+        present.has(folder),
+      ),
+      ["fetch", "report"],
+    );
   });
 });

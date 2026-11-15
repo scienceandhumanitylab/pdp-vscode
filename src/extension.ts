@@ -5,13 +5,19 @@ import * as pdp from "./pdp";
 import { PdpGraphViewProvider } from "./graphView";
 import { ProcessRegistry, type TrackedProcess } from "./processes";
 import { ProcessItem, PdpRemoteProvider } from "./remoteView";
-import { PdpTasksProvider, TaskItem } from "./tasksView";
+import {
+  missingTaskFolders,
+  PdpTasksProvider,
+  TaskItem,
+  taskFolderPath,
+} from "./tasksView";
 
 const tasksProvider = new PdpTasksProvider();
 const processes = new ProcessRegistry();
 const remoteProvider = new PdpRemoteProvider(processes);
 export let graphView: PdpGraphViewProvider | null = null;
 let lastStatus: pdp.ProjectStatus | null = null;
+let lastError: string | null = null;
 let refreshing: Promise<pdp.ProjectStatus | null> | null = null;
 let refreshQueued = false;
 let queuedNotify = false;
@@ -117,6 +123,7 @@ async function doRefresh(
   );
   if (!hasProject) {
     lastStatus = null;
+    lastError = null;
     tasksProvider.update(null);
     graphView?.update(null);
     statusBar.hide();
@@ -132,19 +139,22 @@ async function doRefresh(
     statusBar.tooltip = `${stale} of ${status.tasks.length} tasks are stale. Click to run the stale tasks.`;
     statusBar.backgroundColor = undefined;
     statusBar.show();
+    lastError = null;
+    void promptMissingFolders(status);
     return status;
   } catch (err) {
-    lastStatus = null;
-    tasksProvider.update(null);
+    // Keep the last good status on screen; an emptied sidebar looks unrecoverable.
+    const message = (err as Error).message;
     statusBar.text = "$(error) PDP";
-    statusBar.tooltip = (err as Error).message;
+    statusBar.tooltip = message;
     statusBar.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground",
     );
     statusBar.show();
-    if (notifyOnError) {
-      vscode.window.showErrorMessage(`PDP: ${(err as Error).message}`);
+    if (notifyOnError || message !== lastError) {
+      void showError(message);
     }
+    lastError = message;
     return null;
   }
 }
@@ -188,6 +198,7 @@ function registerCommands(): vscode.Disposable[] {
     register("pdp.cleanTask", (arg) =>
       withTask(arg, (id) => execSimple(["clean", id], `PDP: Cleaned ${id}`)),
     ),
+    register("pdp.deleteTask", (arg) => withTask(arg, deleteTask)),
     register("pdp.cleanAll", () => execSimple(["clean"], "PDP: Cleaned all")),
     register("pdp.validate", () =>
       execSimple(["validate"], "PDP: Valid project"),
@@ -471,6 +482,7 @@ const TASK_MENU_ACTIONS = [
   { label: "Run on Slurm", command: "pdp.runSlurm" },
   { label: "Clean", command: "pdp.cleanTask" },
   { label: "Open task.yml", command: "pdp.openTask" },
+  { label: "Delete…", command: "pdp.deleteTask" },
 ];
 
 async function taskMenu(id: string): Promise<void> {
@@ -535,14 +547,94 @@ async function taskFromArgOrPick(
   return picked?.task;
 }
 
-// pdp output is untrusted: a crafted id must not escape the workspace root
 function taskFolder(id: string): string | undefined {
-  if (/[\\/]|\.\./.test(id)) {
-    vscode.window.showWarningMessage(`PDP: Invalid task id "${id}"`);
+  const root = pdp.workspaceRoot();
+  if (!root) {
     return undefined;
   }
+  const folder = taskFolderPath(root, id);
+  if (!folder) {
+    vscode.window.showWarningMessage(`PDP: Invalid task id "${id}"`);
+  }
+  return folder;
+}
+
+async function deleteTask(id: string): Promise<void> {
+  const folder = taskFolder(id);
+  if (!folder) {
+    return;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    `Delete task "${id}"?`,
+    {
+      modal: true,
+      detail: `Deletes the folder ${folder} and removes "${id}" from pdp.yml. This cannot be undone.`,
+    },
+    "Delete",
+  );
+  if (choice !== "Delete") {
+    return;
+  }
+  // The folder vanishes before pdp.yml is rewritten; don't let a watcher
+  // refresh in between offer to "clean up" the task being deleted.
+  dismissedMissing.add(id);
+  await execSimple(["delete", id, "--yes"], `PDP: Deleted ${id}`);
+  if (fs.existsSync(folder)) {
+    dismissedMissing.delete(id); // refused or failed: a later manual delete prompts
+  }
+}
+
+// Asked once per session per id, so watcher refreshes do not re-prompt.
+const dismissedMissing = new Set<string>();
+let promptingMissing = false;
+
+async function promptMissingFolders(status: pdp.ProjectStatus): Promise<void> {
   const root = pdp.workspaceRoot();
-  return root && path.join(root, id);
+  if (!root || promptingMissing) {
+    return;
+  }
+  const missing = missingTaskFolders(status, root).filter(
+    (id) => !dismissedMissing.has(id),
+  );
+  if (!missing.length) {
+    return;
+  }
+  missing.forEach((id) => dismissedMissing.add(id));
+  promptingMissing = true;
+  try {
+    const choice = await vscode.window.showWarningMessage(
+      `Listed in pdp.yml but folder is missing: ${missing.join(", ")}. Remove them?`,
+      {
+        modal: true,
+        detail: "Removes their entries from pdp.yml with pdp delete.",
+      },
+      "Remove",
+    );
+    if (choice !== "Remove") {
+      return;
+    }
+    // A folder restored while the modal was open (git checkout) must survive.
+    const stillMissing = new Set(missingTaskFolders(status, root));
+    const toRemove = missing.filter((id) => stillMissing.has(id));
+    const errors: string[] = [];
+    // Status is topological; dependents go first so pdp delete allows each.
+    for (const id of [...toRemove].reverse()) {
+      const res = await pdp.exec(["delete", id, "--yes"]);
+      if (res.code !== 0) {
+        errors.push(res.stderr.trim() || res.stdout.trim() || `${id} failed`);
+      }
+    }
+    await refresh();
+    if (errors.length) {
+      await showError(errors.join("\n"));
+    } else if (toRemove.length) {
+      vscode.window.showInformationMessage(
+        `PDP: Removed ${toRemove.join(", ")}`,
+      );
+    }
+  } finally {
+    promptingMissing = false;
+  }
 }
 
 async function openTaskYml(id: string): Promise<void> {

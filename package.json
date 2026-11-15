@@ -83,6 +83,10 @@
         "icon": "$(trash)"
       },
       {
+        "command": "pdp.deleteTask",
+        "title": "PDP: Delete Task…"
+      },
+      {
         "command": "pdp.cleanAll",
         "title": "PDP: Clean All",
         "icon": "$(trash)"
@@ -318,6 +322,11 @@
           "group": "4_clean@1"
         },
         {
+          "command": "pdp.deleteTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "5_delete@1"
+        },
+        {
           "command": "pdp.openDagsterUi",
           "when": "view == pdp.remote && viewItem == process",
           "group": "inline@1"
@@ -329,6 +338,28 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "pdp.tasks.focus",
+        "key": "alt+p p",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "pdp.graph.focus",
+        "key": "alt+p g",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "pdp.remote.focus",
+        "key": "alt+p r",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "pdp.runAll",
+        "key": "alt+p space",
+        "when": "pdp.hasProject && !terminalFocus"
+      }
+    ],
     "configuration": {
       "title": "PDP",
       "properties": {

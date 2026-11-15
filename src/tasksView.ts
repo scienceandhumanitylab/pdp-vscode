@@ -1,14 +1,90 @@
+import * as fs from "fs";
+import * as path from "path";
 import * as vscode from "vscode";
-import type { ProjectStatus, TaskStatus } from "./pdp";
+import { workspaceRoot, type ProjectStatus, type TaskStatus } from "./pdp";
 
-export class TaskItem extends vscode.TreeItem {
-  constructor(readonly task: TaskStatus) {
+// pdp output is untrusted: a crafted id must not escape the workspace root
+export function taskFolderPath(root: string, id: string): string | undefined {
+  return /[\\/]|\.\./.test(id) ? undefined : path.join(root, id);
+}
+
+export function missingTaskFolders(
+  status: ProjectStatus,
+  root: string,
+  exists: (folder: string) => boolean = fs.existsSync,
+): string[] {
+  return status.tasks
+    .map((task) => task.id)
+    .filter((id) => {
+      const folder = taskFolderPath(root, id);
+      return folder !== undefined && !exists(folder);
+    });
+}
+
+function isDirectory(fsPath: string): boolean {
+  try {
+    return fs.statSync(fsPath).isDirectory();
+  } catch {
+    return false; // broken symlink
+  }
+}
+
+export class FileItem extends vscode.TreeItem {
+  constructor(readonly fsPath: string) {
+    const folder = isDirectory(fsPath);
     super(
-      task.id,
-      TaskItem.hasDetail(task)
+      path.basename(fsPath),
+      folder
         ? vscode.TreeItemCollapsibleState.Collapsed
         : vscode.TreeItemCollapsibleState.None,
     );
+    this.resourceUri = vscode.Uri.file(fsPath);
+    this.iconPath = folder ? vscode.ThemeIcon.Folder : vscode.ThemeIcon.File;
+    this.tooltip = fsPath;
+    if (!folder) {
+      this.command = {
+        command: "vscode.open",
+        title: "Open file",
+        arguments: [this.resourceUri],
+      };
+    }
+  }
+
+  childItems(): FileItem[] {
+    return listFolder(this.fsPath);
+  }
+}
+
+function listFolder(folder: string): FileItem[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(folder);
+  } catch {
+    return [];
+  }
+  const items = names.map((name) => new FileItem(path.join(folder, name)));
+  const isFolder = (item: FileItem) =>
+    item.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+  return items.sort(
+    (a, b) =>
+      Number(isFolder(b)) - Number(isFolder(a)) ||
+      String(a.label).localeCompare(String(b.label)),
+  );
+}
+
+export class TaskItem extends vscode.TreeItem {
+  readonly folder: string | undefined;
+
+  constructor(readonly task: TaskStatus) {
+    const root = workspaceRoot();
+    const folder = root ? taskFolderPath(root, task.id) : undefined;
+    super(
+      task.id,
+      TaskItem.hasDetail(task) || (folder && fs.existsSync(folder))
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None,
+    );
+    this.folder = folder;
     this.description = [task.stale ? "stale" : "fresh", task.description]
       .filter(Boolean)
       .join(" · ");
@@ -84,7 +160,7 @@ export class TaskItem extends vscode.TreeItem {
         ),
       );
     }
-    return children;
+    return this.folder ? [...children, ...listFolder(this.folder)] : children;
   }
 }
 
@@ -109,12 +185,14 @@ export class PdpTasksProvider implements vscode.TreeDataProvider<vscode.TreeItem
   }
 
   getChildren(element?: vscode.TreeItem): vscode.TreeItem[] {
-    if (element instanceof TaskItem) {
+    if (element instanceof TaskItem || element instanceof FileItem) {
       return element.childItems();
     }
     if (!this.current) {
       return [];
     }
-    return this.current.tasks.map((task) => new TaskItem(task));
+    const root = workspaceRoot();
+    const tasks = this.current.tasks.map((task) => new TaskItem(task));
+    return root ? [new FileItem(path.join(root, "pdp.yml")), ...tasks] : tasks;
   }
 }

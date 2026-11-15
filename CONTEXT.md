@@ -73,7 +73,8 @@ _Avoid_: Terminal, console.
 
 **Tasks view**:
 The sidebar list of every task in dependency order, showing whether each is
-stale, with run and clean buttons per task.
+stale, with run and clean buttons per task. It starts with a `pdp.yml` row,
+and each task expands to its details and then its folder's files.
 _Avoid_: Task tree (the `pdp tree` output), explorer.
 
 **Remote view**:
