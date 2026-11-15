@@ -6,6 +6,18 @@ Yes, but will it VScode?
 
 This is a VScode implementation of the [pdp library](https://github.com/scienceandhumanitylab/pdp). Work in progress. Not yet available on VScode marketplace.
 
+## Keyboard shortcuts
+
+Chords start with `alt+p`. They are off while the integrated terminal has
+focus, so they never fight the shell.
+
+| Keys                 | Action                |
+| -------------------- | --------------------- |
+| `alt+p` then `p`     | Focus the Tasks view  |
+| `alt+p` then `g`     | Focus the Graph view  |
+| `alt+p` then `r`     | Focus the Remote view |
+| `alt+p` then `space` | Run all stale tasks   |
+
 ## Development
 
 ```sh
