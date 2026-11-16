@@ -14,6 +14,19 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Remote runs now show their real result summary; the trailing
   "`pdp remote pull` to fetch output." line used to cut the report off, so
   every remote run reported "nothing to run".
+- **PDP: Freshen Task (and Downstream)** and **PDP: Freshen Only This Task**
+  on a task's right-click menu, the graph node menu and the palette: mark
+  tasks fresh without running them, after a confirmation that outputs are
+  not recomputed. When freshening makes downstream tasks stale, the result
+  offers a **Freshen Downstream** button (`pdp freshen --from`, pdp's own
+  suggestion).
+- The Tasks view no longer shows `depends on` / `entrypoint` rows, nor lists
+  them in the tooltip — clicking the task opens `task.yml`, where they are
+  configured. Slurm flags still show.
+- The missing-folder dialog offers **Scaffold** (recreate the folders) as
+  well as **Remove**.
+- **PDP: Validate** surfaces pdp's warnings (e.g. a `depends_on` pattern
+  matching no files) instead of a bare "Valid project".
 - The graph moved from a separate editor panel into a **Graph view** in the
   PDP sidebar (below Tasks), drawn top-to-bottom to fit the narrow view.
 - New **PDP: Run To Here** task command (`pdp run --to`): runs a task and

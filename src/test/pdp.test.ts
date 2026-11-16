@@ -3,6 +3,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import {
   MIN_PDP_VERSION,
+  parseFreshen,
   parseReport,
   parseStatus,
   reportFromOutput,
@@ -146,6 +147,30 @@ suite("pdp parsing", () => {
       /ran: fetch.*fresh: report.*failed: build/,
     );
   });
+
+  test("parseFreshen reads the freshen report lines", () => {
+    const report = parseFreshen(
+      "Freshened: fetch, clean\n",
+      [
+        "Still stale: lint",
+        "Freshening made other tasks stale: build",
+        "Freshen them too with: pdp freshen --from build",
+      ].join("\n"),
+    );
+    assert.deepStrictEqual(report, {
+      freshened: ["fetch", "clean"],
+      stillStale: ["lint"],
+      newlyStale: ["build"],
+    });
+  });
+
+  test("parseFreshen returns an empty report when there is nothing to do", () => {
+    assert.deepStrictEqual(parseFreshen("Nothing to freshen.\n", ""), {
+      freshened: [],
+      stillStale: [],
+      newlyStale: [],
+    });
+  });
 });
 
 suite("tasks view", () => {
@@ -192,18 +217,18 @@ suite("tasks view", () => {
     assert.strictEqual(clean?.description, "fresh · tidy up");
   });
 
-  test("task children start with depends on, entrypoint and slurm", async () => {
+  test("task children show slurm flags only; task.yml carries the rest", async () => {
     const provider = new PdpTasksProvider();
     provider.update(status);
     const [, , clean] = (await provider.getChildren()) as TaskItem[];
     const details = (await provider.getChildren(clean))
       .filter((item) => !(item instanceof FileItem))
       .map((item) => item.description ?? item.label);
-    assert.deepStrictEqual(details, [
-      "depends on: fetch",
-      "entrypoint: make",
-      "slurm: mem 16G",
-    ]);
+    assert.deepStrictEqual(details, ["slurm: mem 16G"]);
+    assert.ok(
+      !String(clean.tooltip).match(/depends on|entrypoint/),
+      `tooltip should not repeat task.yml details: ${clean.tooltip}`,
+    );
   });
 
   test("task without detail or folder has no children and no expand", async () => {

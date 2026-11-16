@@ -61,9 +61,9 @@ Run the tests with `pnpm test`.
    **PDP: Init Project** from the command palette) and asks for a name.
 3. The Tasks view starts with a `pdp.yml` row, then lists your tasks in
    topological order. Each shows a **stale** or **fresh** label with its own
-   icon; expand a task to see its dependencies, entrypoint and Slurm flags,
-   then its folder's files. Click a task to open its `task.yml`, or a file to
-   open it.
+   icon; expand a task to see its Slurm flags, then its folder's files. Click
+   a task to open its `task.yml`, where its dependencies and entrypoint are
+   configured, or click a file to open it.
 4. The status bar shows `PDP: N stale` — click it to run all stale tasks.
 
 The view refreshes automatically (file watchers on `input/`, `src/`,
@@ -78,7 +78,8 @@ status, the status bar shows `PDP` with an error icon, and you get a
 notification whenever the error changes.
 
 If `pdp.yml` lists a task whose folder is gone (deleted by hand, say), the
-extension asks once per session whether to remove those entries.
+extension asks once per session whether to scaffold the folders again or
+remove the entries from `pdp.yml`.
 
 ## Commands
 
@@ -86,13 +87,19 @@ Everything is in the command palette as **PDP: …**; the frequent ones are
 also buttons on the views.
 
 **Tasks view title:** Run all (stale) `▶`, Create task, Refresh, plus Run…,
-Scaffold, Validate, Init project and Clean all under `…`.
+Scaffold, Validate, Init project and Clean all under `…`. Validate reports
+pdp's warnings (for example, a `depends_on` pattern matching no files), not
+just success.
 
 **On a task** (inline or right-click): Run, Clean, Run only this task, Run to
-here, Run from here, Force run, Run on Slurm, Remote run, Open task.yml,
-Reveal task folder, Clean task, Delete task…. **Run to here** runs the task
-and everything upstream of it, so it works even when an upstream task is
-stale — which **Run only this task** refuses. **Delete task…** asks first,
+here, Run from here, Force run, Run on Slurm, Freshen (downstream), Freshen
+only, Remote run, Open task.yml, Reveal task folder, Clean task, Delete
+task…. **Run to here** runs the task and everything upstream of it, so it
+works even when an upstream task is stale — which **Run only this task**
+refuses. **Freshen** marks tasks fresh without running them (pdp sets their
+output file times to now — for a change you know doesn't affect results,
+like a comment); it asks first, and if it makes downstream tasks stale the
+notification offers **Freshen Downstream**. **Delete task…** asks first,
 then removes the task's folder and its `pdp.yml` entry (`pdp delete`, so it
 needs a pdp with that command); pdp refuses while another task depends on it.
 
@@ -122,7 +129,7 @@ the graph out and becomes the project's automatic layout — and **Reset Graph
 Layout**, which clears your arrangement back to that automatic layout. Nodes
 are labelled `task ✗` / `task ✓` and coloured stale/fresh and follow your
 colour theme; hover a node for its full state. Click a node to open that
-task's `task.yml`; right-click it for the task menu (run variants, Clean,
+task's `task.yml`; right-click it for the task menu (run variants, Freshen, Clean,
 Open task.yml, Delete…).
 
 ## Dagster and the cluster

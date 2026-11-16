@@ -78,6 +78,14 @@
         "title": "PDP: Run Task on Slurm"
       },
       {
+        "command": "pdp.freshenTask",
+        "title": "PDP: Freshen Task (and Downstream)"
+      },
+      {
+        "command": "pdp.freshenOnly",
+        "title": "PDP: Freshen Only This Task"
+      },
+      {
         "command": "pdp.cleanTask",
         "title": "PDP: Clean Task",
         "icon": "$(trash)"
@@ -365,6 +373,16 @@
           "command": "pdp.deleteTask",
           "when": "view == pdp.tasks && viewItem == task",
           "group": "5_delete@1"
+        },
+        {
+          "command": "pdp.freshenTask",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "6_freshen@1"
+        },
+        {
+          "command": "pdp.freshenOnly",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "6_freshen@2"
         },
         {
           "command": "pdp.openDagsterUi",

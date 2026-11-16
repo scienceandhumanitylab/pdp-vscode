@@ -297,3 +297,35 @@ export function reportSummary(report: RunReport): string {
   }
   return parts.join(" · ") || "nothing to run";
 }
+
+export interface FreshenReport {
+  freshened: string[];
+  stillStale: string[];
+  newlyStale: string[];
+}
+
+const FRESHEN_PREFIXES: [string, keyof FreshenReport][] = [
+  ["Freshened: ", "freshened"],
+  ["Still stale: ", "stillStale"],
+  ["Freshening made other tasks stale: ", "newlyStale"],
+];
+
+export function parseFreshen(stdout: string, stderr: string): FreshenReport {
+  const report: FreshenReport = {
+    freshened: [],
+    stillStale: [],
+    newlyStale: [],
+  };
+  for (const line of `${stdout.trimEnd()}\n${stderr}`.split("\n")) {
+    for (const [prefix, key] of FRESHEN_PREFIXES) {
+      if (line.startsWith(prefix)) {
+        report[key] = line
+          .slice(prefix.length)
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean);
+      }
+    }
+  }
+  return report;
+}

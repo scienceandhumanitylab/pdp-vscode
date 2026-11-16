@@ -196,14 +196,19 @@ function registerCommands(): vscode.Disposable[] {
       ),
     ),
 
+    register("pdp.freshenTask", (arg) =>
+      withTask(arg, (id) => freshenTask(id, false)),
+    ),
+    register("pdp.freshenOnly", (arg) =>
+      withTask(arg, (id) => freshenTask(id, true)),
+    ),
+
     register("pdp.cleanTask", (arg) =>
       withTask(arg, (id) => execSimple(["clean", id], `PDP: Cleaned ${id}`)),
     ),
     register("pdp.deleteTask", (arg) => withTask(arg, deleteTask)),
     register("pdp.cleanAll", () => execSimple(["clean"], "PDP: Cleaned all")),
-    register("pdp.validate", () =>
-      execSimple(["validate"], "PDP: Valid project"),
-    ),
+    register("pdp.validate", validateProject),
     register("pdp.scaffold", () => execSimple(["scaffold"], "PDP: Scaffolded")),
     register("pdp.init", initProject),
     register("pdp.create", createTask),
@@ -485,6 +490,8 @@ const TASK_MENU_ACTIONS = [
   { label: "Run from here", command: "pdp.runFrom" },
   { label: "Force run", command: "pdp.runForce" },
   { label: "Run on Slurm", command: "pdp.runSlurm" },
+  { label: "Freshen (downstream)", command: "pdp.freshenTask" },
+  { label: "Freshen only", command: "pdp.freshenOnly" },
   { label: "Clean", command: "pdp.cleanTask" },
   { label: "Open task.yml", command: "pdp.openTask" },
   { label: "Delete…", command: "pdp.deleteTask" },
@@ -573,6 +580,108 @@ function taskFolder(id: string): string | undefined {
   return folder;
 }
 
+async function freshenTask(id: string, only: boolean): Promise<void> {
+  const choice = await vscode.window.showWarningMessage(
+    `Freshen "${id}" without running it?`,
+    {
+      modal: true,
+      detail: only
+        ? `Marks "${id}" fresh by setting its output file times to now. Its outputs are not recomputed.`
+        : `Marks "${id}" and every stale task downstream of it fresh by setting output file times to now. Outputs are not recomputed.`,
+    },
+    "Freshen",
+  );
+  if (choice !== "Freshen") {
+    return;
+  }
+  await freshenRun(only ? ["freshen", id, "--only"] : ["freshen", id]);
+}
+
+// Reached from the task menu (after its modal) and from the Freshen
+// Downstream button in the result notification (the click is the consent).
+async function freshenRun(args: string[]): Promise<void> {
+  try {
+    const res = await pdp.exec(args);
+    const report = pdp.parseFreshen(res.stdout, res.stderr);
+    // exit 1 with a report means "selected task still stale"; only a bare
+    // failure (refusal such as stale upstream, empty output) is an error
+    if (
+      res.code !== 0 &&
+      !report.freshened.length &&
+      !report.stillStale.length &&
+      !report.newlyStale.length
+    ) {
+      throw new Error(
+        res.stderr.trim() || res.stdout.trim() || "pdp freshen failed",
+      );
+    }
+    await refresh();
+    notifyFreshenResult(report);
+  } catch (err) {
+    await refresh();
+    await showError((err as Error).message);
+  }
+}
+
+function notifyFreshenResult(report: pdp.FreshenReport): void {
+  const parts: string[] = [];
+  if (report.freshened.length) {
+    parts.push(`freshened: ${report.freshened.join(", ")}`);
+  }
+  if (report.stillStale.length) {
+    parts.push(`still stale: ${report.stillStale.join(", ")}`);
+  }
+  const summary = parts.join(" · ") || "nothing to freshen";
+  if (report.newlyStale.length) {
+    const message = `PDP: ${summary} — freshening made ${report.newlyStale.join(", ")} stale`;
+    // The follow-up id comes from parsed pdp output, so it passes the same
+    // gate as dispatched task ids; and without a freshened task, --from
+    // would refuse on the still-stale upstream anyway.
+    const first = report.freshened.length ? report.newlyStale[0] : undefined;
+    if (first !== undefined && TASK_ID_PATTERN.test(first)) {
+      vscode.window
+        .showWarningMessage(message, "Freshen Downstream")
+        .then(
+          (choice) =>
+            choice === "Freshen Downstream" &&
+            void freshenRun(["freshen", "--from", first]),
+        );
+    } else {
+      vscode.window.showWarningMessage(message);
+    }
+  } else if (report.stillStale.length) {
+    vscode.window.showWarningMessage(`PDP: ${summary}`);
+  } else {
+    vscode.window.showInformationMessage(`PDP: ${summary}`);
+  }
+}
+
+async function validateProject(): Promise<void> {
+  try {
+    const res = await pdp.exec(["validate"]);
+    if (res.code !== 0) {
+      throw new Error(
+        res.stderr.trim() || res.stdout.trim() || "pdp validate failed",
+      );
+    }
+    const warnings = res.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("Warning: "))
+      .map((line) => line.slice("Warning: ".length));
+    if (warnings.length) {
+      vscode.window.showWarningMessage(
+        `PDP: Valid with warnings — ${warnings.join("; ")}`,
+      );
+    } else {
+      vscode.window.showInformationMessage("PDP: Valid project");
+    }
+  } catch (err) {
+    await refresh();
+    await showError((err as Error).message);
+  }
+}
+
 async function deleteTask(id: string): Promise<void> {
   const folder = taskFolder(id);
   if (!folder) {
@@ -617,13 +726,19 @@ async function promptMissingFolders(status: pdp.ProjectStatus): Promise<void> {
   promptingMissing = true;
   try {
     const choice = await vscode.window.showWarningMessage(
-      `Listed in pdp.yml but folder is missing: ${missing.join(", ")}. Remove them?`,
+      `Listed in pdp.yml but folder is missing: ${missing.join(", ")}.`,
       {
         modal: true,
-        detail: "Removes their entries from pdp.yml with pdp delete.",
+        detail:
+          "Scaffold recreates their folders from pdp.yml; Remove deletes their entries from pdp.yml.",
       },
+      "Scaffold",
       "Remove",
     );
+    if (choice === "Scaffold") {
+      await execSimple(["scaffold"], "PDP: Scaffolded");
+      return;
+    }
     if (choice !== "Remove") {
       return;
     }

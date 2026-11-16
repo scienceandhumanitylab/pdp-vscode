@@ -46,9 +46,9 @@ pdp feature is reachable as a command.
 _Avoid_: Action, job (job is a Slurm term).
 
 **One-off command**:
-A command that finishes on its own (`run`, `clean`, `validate`, `create`,
-`scaffold`, `remote push|pull|run|stop`). Shows progress with a Cancel
-button and ends with a Result summary.
+A command that finishes on its own (`run`, `freshen`, `clean`, `validate`,
+`create`, `scaffold`, `delete`, `remote push|pull|run|stop`). Shows progress
+with a Cancel button and ends with a Result summary.
 _Avoid_: Short command, task (Task is pdp's unit of work).
 
 **Background process**:

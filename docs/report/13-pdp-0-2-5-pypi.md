@@ -22,7 +22,7 @@ Implements plan step 13. pdp 0.2.5 is the first release on PyPI, published as
   receipt path, remote default spec = same `pdp-helper` version as local),
   CONTEXT ("fresh" in the Result summary glossary), CHANGELOG.
 - Environment: the machine's pdp is now the PyPI release (`uv tool install
-  "pdp-helper[dagster]"`, `pdp --version` → 0.2.5), which the fixture suite
+"pdp-helper[dagster]"`, `pdp --version` → 0.2.5), which the fixture suite
   runs against. The old editable tool `pdp v0.2.4` is still registered in uv
   (see Deferred).
 

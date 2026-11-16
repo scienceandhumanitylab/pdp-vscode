@@ -107,23 +107,13 @@ export class TaskItem extends vscode.TreeItem {
   }
 
   private static hasDetail(task: TaskStatus): boolean {
-    return (
-      task.depends_on.length > 0 ||
-      !!task.entrypoint ||
-      Object.keys(task.slurm).length > 0
-    );
+    return Object.keys(task.slurm).length > 0;
   }
 
   private tooltipText(): string {
     const lines = [`${this.task.id} — ${this.task.stale ? "stale" : "fresh"}`];
     if (this.task.description) {
       lines.push(this.task.description);
-    }
-    if (this.task.depends_on.length) {
-      lines.push(`depends on: ${this.task.depends_on.join(", ")}`);
-    }
-    if (this.task.entrypoint) {
-      lines.push(`entrypoint: ${this.task.entrypoint}`);
     }
     if (Object.keys(this.task.slurm).length) {
       lines.push(
@@ -135,21 +125,10 @@ export class TaskItem extends vscode.TreeItem {
     return lines.join("\n");
   }
 
+  // Task.yml (opened by clicking the task) is where dependencies and the
+  // entrypoint are read; the tree only repeats what has no other home.
   childItems(): vscode.TreeItem[] {
     const children: vscode.TreeItem[] = [];
-    if (this.task.depends_on.length) {
-      children.push(
-        detailItem(
-          `depends on: ${this.task.depends_on.join(", ")}`,
-          "references",
-        ),
-      );
-    }
-    if (this.task.entrypoint) {
-      children.push(
-        detailItem(`entrypoint: ${this.task.entrypoint}`, "terminal"),
-      );
-    }
     if (Object.keys(this.task.slurm).length) {
       children.push(
         detailItem(

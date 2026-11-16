@@ -1,6 +1,9 @@
 import * as assert from "assert";
+import * as fs from "fs";
+import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "../pdp";
+import { parseFreshen } from "../pdp";
 import { FileItem, PdpTasksProvider, TaskItem } from "../tasksView";
 
 // Runs against the real pdp binary in src/test/fixtures/demo, which the
@@ -86,7 +89,57 @@ suite("fixture integration", () => {
     );
   });
 
-  test("tasks tree shows pdp.yml, then each task's details and folder", async () => {
+  test("freshen marks a stale task fresh without running it", async () => {
+    await pdp.spawnPdp(["run", "--to", "clean"]).done;
+    // a "code" change (task-root file newer than the output) makes import stale
+    const makefile = path.join(pdp.workspaceRoot()!, "import", "Makefile");
+    const now = new Date();
+    fs.utimesSync(makefile, now, now);
+    let status = await pdp.status();
+    assert.strictEqual(
+      status.tasks.find((task) => task.id === "import")?.stale,
+      true,
+    );
+
+    const res = await pdp.exec(["freshen", "import", "--only"]);
+    assert.strictEqual(res.code, 0);
+    assert.deepStrictEqual(parseFreshen(res.stdout, res.stderr), {
+      freshened: ["import"],
+      stillStale: [],
+      newlyStale: ["clean"],
+    });
+
+    status = await pdp.status();
+    assert.strictEqual(
+      status.tasks.find((task) => task.id === "import")?.stale,
+      false,
+    );
+    assert.strictEqual(
+      status.tasks.find((task) => task.id === "clean")?.stale,
+      true,
+    );
+  });
+
+  test("freshen reports tasks that stay stale instead of failing silently", async () => {
+    await pdp.spawnPdp(["run", "--to", "clean"]).done;
+    const makefile = path.join(pdp.workspaceRoot()!, "import", "Makefile");
+    // an input dated in the future stays newer than anything freshen writes
+    const future = new Date(Date.now() + 60_000);
+    fs.utimesSync(makefile, future, future);
+
+    const res = await pdp.exec(["freshen", "import", "--only"]);
+    assert.strictEqual(res.code, 1);
+    assert.deepStrictEqual(parseFreshen(res.stdout, res.stderr), {
+      freshened: [],
+      stillStale: ["import"],
+      newlyStale: ["clean"],
+    });
+
+    // leave the fixture runnable for later tests
+    fs.utimesSync(makefile, new Date(0), new Date(0));
+  });
+
+  test("tasks tree shows pdp.yml, then each task's folder; details stay in task.yml", async () => {
     await pdp.spawnPdp(["run", "--to", "clean"]).done;
     const provider = new PdpTasksProvider();
     provider.update(await pdp.status());
@@ -96,11 +149,12 @@ suite("fixture integration", () => {
 
     const clean = tasks.find((item) => item.label === "clean")!;
     const children = await provider.getChildren(clean);
-    const [dependsOn, entrypoint, ...entries] = children;
-    assert.strictEqual(dependsOn.label, "depends on: import");
-    assert.strictEqual(entrypoint.label, "entrypoint: make");
+    assert.ok(
+      children.every((item) => item instanceof FileItem),
+      `expected folder files only, got ${children.map((item) => item.label)}`,
+    );
     assert.deepStrictEqual(
-      entries.map((item) => item.label),
+      children.map((item) => item.label),
       ["input", "output", "src", "Makefile", "task.yml"],
     );
 

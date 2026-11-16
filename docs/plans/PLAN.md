@@ -379,6 +379,28 @@ line to "Fresh:". `src/pdp.ts` + tests + docs:
   and a UI for `pdp freshen` and `pdp scaf`.
 - Report `docs/report/13-pdp-0-2-5-pypi.md`.
 
+### 14. freshen UI, scaffold in the missing-folder dialog, leaner task rows
+
+`src/extension.ts`, `src/pdp.ts`, `src/tasksView.ts`, `src/test/*`,
+`package.json`.
+
+- `pdp.freshenTask` (task + everything downstream) and `pdp.freshenOnly`,
+  from the task context menu (group `6_freshen`), the graph node menu and
+  the palette. A modal confirms ("outputs are not recomputed"); the result
+  parses the `Freshened:` / `Still stale:` / `Freshening made other tasks
+stale:` lines (`parseFreshen`) and offers a **Freshen Downstream** button
+  (`pdp freshen --from <first>`, pdp's own hint). A bare non-zero exit (stale
+  upstream, empty `output/`) is an error; exit 1 with a report (still stale)
+  is a warning.
+- The missing-folder modal offers **Scaffold** (recreate folders from
+  `pdp.yml`) before **Remove**.
+- PDP: Validate shows pdp's `Warning:` lines instead of hiding them behind
+  "Valid project".
+- Task rows for `depends on` / `entrypoint` (and their tooltip lines) are
+  gone: `task.yml`, one click away, is where they are read. Slurm flags
+  stay. Showing `dependency_entries` is moot with the rows gone.
+- Report `docs/report/14-freshen-scaffold-leaner-task-rows.md`.
+
 ## Development
 
 ### The pdp tool
