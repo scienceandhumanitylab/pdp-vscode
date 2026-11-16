@@ -60,7 +60,7 @@ _Avoid_: Server, daemon, long-running command.
 
 **Result summary**:
 The notification shown when a one-off command ends: which tasks ran, were
-current, failed, had no entrypoint or were skipped, as pdp reported them.
+fresh, failed, had no entrypoint or were skipped, as pdp reported them.
 _Avoid_: Run report (pdp's name for the data the summary is built from),
 toast.
 

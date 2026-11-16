@@ -13,7 +13,7 @@ const remoteStatusJson = JSON.stringify({
   host: "cluster.example.edu",
   path: "/home/me/demo",
   port: "3002",
-  version: "pdp[dagster] @ git+...",
+  version: "pdp-helper[dagster]==0.2.5",
   pushed: true,
   session: { name: "pdp-demo", running: false },
   run: {

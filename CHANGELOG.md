@@ -7,6 +7,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 - Initial release
+- pdp ≥ 0.2.5 (the first release on PyPI, as `pdp-helper`) is now the
+  minimum; the upgrade hint says `uv tool upgrade pdp-helper`.
+- Run notifications say `fresh:` where they said `current:`, matching pdp
+  0.2.5's run report (`Current:` became `Fresh:`).
+- Remote runs now show their real result summary; the trailing
+  "`pdp remote pull` to fetch output." line used to cut the report off, so
+  every remote run reported "nothing to run".
 - The graph moved from a separate editor panel into a **Graph view** in the
   PDP sidebar (below Tasks), drawn top-to-bottom to fit the narrow view.
 - New **PDP: Run To Here** task command (`pdp run --to`): runs a task and

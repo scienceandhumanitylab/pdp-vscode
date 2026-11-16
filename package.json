@@ -406,7 +406,7 @@
         "pdp.path": {
           "type": "string",
           "default": "pdp",
-          "markdownDescription": "Path to the `pdp` binary. Defaults to `pdp` on your PATH. Needs pdp ≥ 0.2.4 (`--json` support)."
+          "markdownDescription": "Path to the `pdp` binary. Defaults to `pdp` on your PATH. Needs pdp ≥ 0.2.5 (`pdp-helper` on PyPI)."
         },
         "pdp.dagsterPort": {
           "type": "number",

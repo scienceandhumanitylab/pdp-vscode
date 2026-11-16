@@ -18,10 +18,10 @@ import {
 
 suite("pdp parsing", () => {
   test("versionAtLeast compares 3-part versions", () => {
-    assert.ok(versionAtLeast("0.2.4", MIN_PDP_VERSION));
+    assert.ok(versionAtLeast("0.2.5", MIN_PDP_VERSION));
     assert.ok(versionAtLeast("1.0.0", MIN_PDP_VERSION));
     assert.ok(versionAtLeast("pdp, version 0.3.0", MIN_PDP_VERSION));
-    assert.ok(!versionAtLeast("0.2.3", MIN_PDP_VERSION));
+    assert.ok(!versionAtLeast("0.2.4", MIN_PDP_VERSION));
     assert.ok(!versionAtLeast("0.2", MIN_PDP_VERSION));
     assert.ok(!versionAtLeast("garbage", MIN_PDP_VERSION));
   });
@@ -71,7 +71,8 @@ suite("pdp parsing", () => {
       "Ran: fetch, clean",
       "Wrote:",
       "  fetch/output/data.txt",
-      "Current: report",
+      "  ... and 12 more in fetch/output",
+      "Fresh: report",
       "",
     ].join("\n");
     const stderr = [
@@ -82,7 +83,7 @@ suite("pdp parsing", () => {
     ].join("\n");
     const report = reportFromOutput(stdout, stderr);
     assert.deepStrictEqual(report.ran, ["fetch", "clean"]);
-    assert.deepStrictEqual(report.current, ["report"]);
+    assert.deepStrictEqual(report.fresh, ["report"]);
     assert.deepStrictEqual(report.noOutput, ["lint"]);
     assert.deepStrictEqual(report.failed, ["build"]);
     assert.deepStrictEqual(report.noEntrpoint, ["seed"]);
@@ -101,6 +102,18 @@ suite("pdp parsing", () => {
     assert.deepStrictEqual(report.failed, []);
   });
 
+  test("parseReport scans past remote run's trailing pull hint", () => {
+    const text = [
+      "cluster log line",
+      "Ran: fetch",
+      "Fresh: report",
+      "`pdp remote pull` to fetch output.",
+    ].join("\n");
+    const report = parseReport(text);
+    assert.deepStrictEqual(report.ran, ["fetch"]);
+    assert.deepStrictEqual(report.fresh, ["report"]);
+  });
+
   test("reportFromOutput joins stdout and stderr halves", () => {
     const stdout = "task output\nRan: fetch\n";
     const stderr = "Failed: build\n";
@@ -113,7 +126,7 @@ suite("pdp parsing", () => {
     assert.strictEqual(
       reportSummary({
         ran: [],
-        current: [],
+        fresh: [],
         failed: [],
         noEntrpoint: [],
         skipped: [],
@@ -124,13 +137,13 @@ suite("pdp parsing", () => {
     assert.match(
       reportSummary({
         ran: ["fetch"],
-        current: [],
+        fresh: ["report"],
         failed: ["build"],
         noEntrpoint: [],
         skipped: [],
         noOutput: [],
       }),
-      /ran: fetch.*failed: build/,
+      /ran: fetch.*fresh: report.*failed: build/,
     );
   });
 });

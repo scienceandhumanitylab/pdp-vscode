@@ -17,7 +17,7 @@ export interface ProjectStatus {
 
 export interface RunReport {
   ran: string[];
-  current: string[];
+  fresh: string[];
   failed: string[];
   noEntrpoint: string[];
   skipped: string[];
@@ -30,10 +30,10 @@ export interface ExecResult {
   stderr: string;
 }
 
-// First pdp release with `status --json` / `remote status --json`.
-export const MIN_PDP_VERSION = [0, 2, 4];
+// First pdp release on PyPI (pdp-helper); renamed "Current:" to "Fresh:".
+export const MIN_PDP_VERSION = [0, 2, 5];
 export const UPGRADE_HINT =
-  "Upgrade pdp with: uv tool upgrade pdp (then reload the window)";
+  "Upgrade pdp with: uv tool upgrade pdp-helper (then reload the window)";
 
 export const channel = vscode.window.createOutputChannel("PDP");
 
@@ -220,7 +220,7 @@ export function spawnPdp(
 
 const REPORT_PREFIXES: [string, keyof RunReport][] = [
   ["Ran: ", "ran"],
-  ["Current: ", "current"],
+  ["Fresh: ", "fresh"],
   ["Failed: ", "failed"],
   ["No entrypoint (failed): ", "noEntrpoint"],
   ["Skipped (upstream failed): ", "skipped"],
@@ -231,6 +231,8 @@ function isReportLine(line: string): boolean {
   return (
     REPORT_PREFIXES.some(([prefix]) => line.startsWith(prefix)) ||
     line === "Wrote:" ||
+    // `pdp remote run` prints this after the streamed report; scan past it
+    line === "`pdp remote pull` to fetch output." ||
     line.startsWith("  ")
   );
 }
@@ -240,7 +242,7 @@ function isReportLine(line: string): boolean {
 export function parseReport(text: string): RunReport {
   const report: RunReport = {
     ran: [],
-    current: [],
+    fresh: [],
     failed: [],
     noEntrpoint: [],
     skipped: [],
@@ -278,8 +280,8 @@ export function reportSummary(report: RunReport): string {
   if (report.ran.length) {
     parts.push(`ran: ${report.ran.join(", ")}`);
   }
-  if (report.current.length) {
-    parts.push(`current: ${report.current.join(", ")}`);
+  if (report.fresh.length) {
+    parts.push(`fresh: ${report.fresh.join(", ")}`);
   }
   if (report.failed.length) {
     parts.push(`failed: ${report.failed.join(", ")}`);

@@ -34,13 +34,13 @@ media/
 - `remoteStatus()`: `pdp remote status --json`.
 - `run(args)`: spawn, pipe stdout/stderr to the Output channel, resolve with
   exit code and the parsed report. The report is the trailing lines
-  `_print_report` prints (`Ran:`, `Current:`, `Failed:`, `No entrypoint
+  `_print_report` prints (`Ran:`, `Fresh:`, `Failed:`, `No entrypoint
 (failed):`, `Skipped (upstream failed):`, `Ran but wrote nothing to
 output/:`).
 - Cancel: send SIGINT (pdp and Dagster shut down cleanly on it).
 - Env: set `COLUMNS=200` so rich does not wrap lines we parse.
-- Version check on activate: `pdp --version` must be ≥ the release that adds
-  `--json`; otherwise show "Upgrade pdp" with the `uv tool upgrade pdp` hint.
+- Version check on activate: `pdp --version` must be ≥ the current release;
+  otherwise show "Upgrade pdp" with the `uv tool upgrade pdp-helper` hint.
 
 ### Commands
 
@@ -365,11 +365,36 @@ Do this last; steps 10–11 land on the Mermaid renderer first.
 - Report `docs/report/12-graph-cytoscape-interactive.md` with vsix size
   before/after.
 
+### 13. Target pdp 0.2.5 (first PyPI release)
+
+pdp 0.2.5 is on PyPI as `pdp-helper` and renamed the run report's "Current:"
+line to "Fresh:". `src/pdp.ts` + tests + docs:
+
+- `MIN_PDP_VERSION` is `[0, 2, 5]`; the upgrade hint says
+  `uv tool upgrade pdp-helper`.
+- `RunReport.current` → `RunReport.fresh`, parsed from `Fresh: `.
+- Guides/plan: install `pdp-helper[dagster]`, upgrade `pdp-helper`; dev runs
+  against the PyPI release, editable only while working on pdp itself.
+- Deferred: `dependency_entries` in `status --json` (file/glob dependencies)
+  and a UI for `pdp freshen` and `pdp scaf`.
+- Report `docs/report/13-pdp-0-2-5-pypi.md`.
+
 ## Development
+
+### The pdp tool
+
+Development runs against the PyPI release by default:
+
+```sh
+uv tool install "pdp-helper[dagster]"
+uv tool upgrade pdp-helper
+```
+
+pdp is published on PyPI as `pdp-helper`; the CLI is still `pdp`.
 
 ### Live pdp edits
 
-pdp is installed as an editable uv tool:
+To work on pdp itself, replace the tool with an editable install:
 
 ```sh
 cd ~/repos/pdpd/pdp
@@ -389,7 +414,7 @@ Reinstall (same command) only when:
 Check what is installed:
 
 ```sh
-cat ~/.local/share/uv/tools/pdp/uv-receipt.toml   # editable = <path>
+cat ~/.local/share/uv/tools/pdp-helper/uv-receipt.toml   # editable = <path>
 pdp --version
 ```
 
@@ -406,11 +431,11 @@ to that environment's binary, e.g. `/path/to/worktree/.venv/bin/pdp` after
 ### Remote runs need the same pdp on the cluster
 
 `pdp remote` installs pdp on the cluster from `PDP_REMOTE_SPEC` (default:
-latest release). To test unreleased `remote status --json` or run changes,
-pin the branch in the project `.env`:
+the same `pdp-helper` version as the local tool). To test unreleased
+`remote status --json` or run changes, pin the branch in the project `.env`:
 
 ```sh
-PDP_REMOTE_SPEC="pdp[dagster] @ git+https://github.com/scienceandhumanitylab/pdp@<sha>"
+PDP_REMOTE_SPEC="pdp-helper[dagster] @ git+https://github.com/scienceandhumanitylab/pdp@<sha>"
 ```
 
 `remote status --json` itself runs locally, so it only needs the editable

@@ -6,16 +6,18 @@ Dagster, push to the cluster, and browse the task graph — without a terminal.
 ## Requirements
 
 - VS Code ≥ 1.140
-- `pdp` ≥ **0.2.4** on your PATH (the first release with `status --json`).
+- `pdp` ≥ **0.2.5** on your PATH (the first release on PyPI, as `pdp-helper`).
 
   ```sh
-  uv tool install "pdp[dagster]"     # first install
-  uv tool upgrade pdp                # if you have an older one
-  pdp --version                      # must print 0.2.4 or newer
+  uv tool install "pdp-helper[dagster]"  # first install
+  uv tool upgrade pdp-helper             # if you have an older one
+  pdp --version                          # must print 0.2.5 or newer
   ```
 
 The extension checks the version when it activates and tells you to upgrade
-if it is too old.
+if it is too old. If you installed pdp from git before it was on PyPI (as the
+tool `pdp`), remove that tool first: `uv tool uninstall pdp`, then install
+`pdp-helper`.
 
 ## Install
 
@@ -136,7 +138,7 @@ Open task.yml, Delete…).
   PDP_REMOTE_PATH=/home/me/my-project
   PDP_REMOTE_PORT=3002
   # optional, pins what gets installed on the cluster:
-  # PDP_REMOTE_SPEC="pdp[dagster] @ git+https://github.com/scienceandhumanitylab/pdp@<sha>"
+  # PDP_REMOTE_SPEC="pdp-helper[dagster] @ git+https://github.com/scienceandhumanitylab/pdp@<sha>"
   ```
 
   `PDP_REMOTE_SPEC` matters while features are unreleased: the cluster needs
@@ -153,7 +155,7 @@ Open task.yml, Delete…).
 ## Troubleshooting
 
 - **"Could not run pdp …"** — `pdp` is not on VS Code's PATH or the version
-  is < 0.2.4. Set `pdp.path` to an absolute binary path (e.g. a worktree's
+  is < 0.2.5. Set `pdp.path` to an absolute binary path (e.g. a worktree's
   `.venv/bin/pdp`) and reload the window.
 - **Nothing in the sidebar** — the workspace root must contain `pdp.yml`.
 - **A command failed** — check **Output → PDP** for the full pdp output.
