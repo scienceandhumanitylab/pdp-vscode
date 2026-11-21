@@ -2,7 +2,7 @@
   "name": "pdp-vscode",
   "displayName": "PDP",
   "description": "Run and watch your pdp project from the sidebar: tasks, remote runs, and the Dagster graph.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "scienceandhumanitylab",
   "repository": {
     "type": "git",
