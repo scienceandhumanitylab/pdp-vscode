@@ -1,7 +1,7 @@
 {
   "name": "pdp-vscode",
   "displayName": "PDP",
-  "description": "Run and watch your pdp project from the sidebar: tasks, remote runs, and the Dagster graph.",
+  "description": "Principled Data Processing in VScode",
   "version": "0.0.4",
   "publisher": "scienceandhumanitylab",
   "icon": "media/icon.png",
