@@ -4,6 +4,7 @@
   "description": "Run and watch your pdp project from the sidebar: tasks, remote runs, and the Dagster graph.",
   "version": "0.0.3",
   "publisher": "scienceandhumanitylab",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/scienceandhumanitylab/pdp-vscode.git"

@@ -4,6 +4,7 @@ src/**
 scripts/**
 out/test/**
 docs/**
+media/logo-big.png
 AGENTS.md
 CONTEXT.md
 .prettierignore
