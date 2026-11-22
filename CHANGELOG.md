@@ -1,11 +1,11 @@
 # Change Log
 
-All notable changes to the "pdp" extension will be documented in this file.
+## [0.0.7] - 2026-11-22
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how
-to structure this file.
+### Changed
 
-## [Unreleased]
+- Moved development out of `README.md` and into `docs/development.md`.
+- Cleaned up `CHANGELOG.md'
 
 ## [0.0.6] - 2026-11-22
 

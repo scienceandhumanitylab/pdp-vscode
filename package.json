@@ -2,7 +2,7 @@
   "name": "pdp-vscode",
   "displayName": "pdp",
   "description": "Principled Data Processing in VScode",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "publisher": "scienceandhumanitylab",
   "icon": "media/icon.png",
   "repository": {
