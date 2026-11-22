@@ -149,6 +149,21 @@ function detailItem(label: string, icon: string): vscode.TreeItem {
   return item;
 }
 
+// The task whose folder contains fsPath, if any (pdp.yml rows answer none).
+export function owningTaskId(
+  tasks: TaskStatus[],
+  root: string,
+  fsPath: string,
+): string | undefined {
+  for (const task of tasks) {
+    const folder = taskFolderPath(root, task.id);
+    if (folder && (fsPath === folder || fsPath.startsWith(folder + path.sep))) {
+      return task.id;
+    }
+  }
+  return undefined;
+}
+
 export class PdpTasksProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private readonly change = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.change.event;

@@ -564,6 +564,38 @@ suite("graph", () => {
         view.webview.html.includes("var(--vscode-menu-selectionBackground)"),
       "layout menu CSS is not on theme colours",
     );
+    assert.ok(
+      view.webview.html.includes(
+        `event.key === "ArrowDown" || event.key === "j"`,
+      ) &&
+        view.webview.html.includes(
+          `event.key === "ArrowUp" || event.key === "k"`,
+        ),
+      "no j/k mapping in the layout menu key handler",
+    );
+    assert.ok(
+      view.webview.html.includes(
+        "#toolbar button:focus { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #ffffff); outline: 2px solid var(--vscode-focusBorder, #007fd4); outline-offset: 1px; }",
+      ),
+      "focused toolbar button is not unmistakable",
+    );
+    assert.ok(
+      view.webview.html.includes(`event.key !== "Tab"`) &&
+        view.webview.html.includes("buttons[next].focus();"),
+      "no Tab wrap handler on the toolbar",
+    );
+    assert.ok(
+      view.webview.html.includes(
+        'if (event.key !== "Tab" || event.defaultPrevented) return;',
+      ) &&
+        view.webview.html.includes(
+          "toolbar.contains(document.activeElement)",
+        ) &&
+        view.webview.html.includes(
+          "(event.shiftKey ? buttons[buttons.length - 1] : buttons[0]).focus();",
+        ),
+      "no document-level Tab routing into the toolbar",
+    );
     provider.dispose();
   });
 
@@ -675,6 +707,87 @@ suite("graph", () => {
       );
     } finally {
       vscode.commands.executeCommand = originalExecute;
+      provider.dispose();
+    }
+  });
+
+  test("save and reset confirm on the status bar", async () => {
+    const posted: Record<string, unknown>[] = [];
+    const listeners: Array<(message: unknown) => void> = [];
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: (listener: (message: unknown) => void) => {
+          listeners.push(listener);
+          return { dispose: () => undefined };
+        },
+        postMessage: (message: Record<string, unknown>) => {
+          posted.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      onDidDispose: () => ({ dispose: () => undefined }),
+    } as unknown as vscode.WebviewView;
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      stubMemento(),
+      () => undefined,
+      () => undefined,
+    );
+    provider.resolveWebviewView(view);
+    provider.update(status);
+    const send = (message: unknown) =>
+      listeners.forEach((listener) => listener(message));
+    const originalBar = vscode.window.setStatusBarMessage;
+    const bar: [string, number | undefined][] = [];
+    vscode.window.setStatusBarMessage = ((
+      message: string,
+      timeout?: unknown,
+    ) => {
+      bar.push([message, timeout as number | undefined]);
+      return { dispose: () => undefined };
+    }) as typeof vscode.window.setStatusBarMessage;
+
+    try {
+      // Nothing saved and no layout chosen: reset announces top-down.
+      await provider.resetLayout();
+      assert.deepStrictEqual(bar.at(-1), [
+        "PDP: Layout reset to Top-down",
+        4000,
+      ]);
+
+      // A chosen layout is what reset returns to without a saved default.
+      await provider.chooseLayout("left-right");
+      await provider.resetLayout();
+      assert.deepStrictEqual(bar.at(-1), [
+        "PDP: Layout reset to Left-right",
+        4000,
+      ]);
+
+      // Saving a default confirms, and later resets name it.
+      provider.saveDefault();
+      send({
+        type: "positions",
+        asDefault: true,
+        positions: {
+          fetch: { x: 1, y: 1 },
+          clean: { x: 2, y: 2 },
+          report: { x: 3, y: 3 },
+        },
+        zoom: 1,
+        pan: { x: 0, y: 0 },
+      });
+      assert.deepStrictEqual(bar.at(-1), [
+        "PDP: Layout saved as default",
+        4000,
+      ]);
+      await provider.resetLayout();
+      assert.deepStrictEqual(bar.at(-1), [
+        "PDP: Layout reset to saved default",
+        4000,
+      ]);
+    } finally {
+      vscode.window.setStatusBarMessage = originalBar;
       provider.dispose();
     }
   });

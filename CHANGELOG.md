@@ -71,3 +71,34 @@ to structure this file.
   collapsed the view.
 - The graph responds to keyboard shortcuts while focused: `I`/`O` zoom, `L`
   choose layout, `S` save layout, `R` reset (the toolbar buttons show the keys).
+- The Layout button opens its menu right at the click (or under the button when
+  activated by keyboard) instead of a QuickPick in the middle of the screen; the
+  palette command keeps the QuickPick.
+- The Tasks view gets single-key shortcuts on the selected task: `R`/`C`/`T`
+  run/clean/run-to after a confirmation, `S` opens the task's source file, `O`
+  reveals its `output/` folder, plus the existing `F` freshen and `D` delete
+  modals.
+- `?` in either view shows a cheat sheet of these keys; picking an entry runs
+  it, and **Customize…** opens the Keyboard Shortcuts editor filtered to `pdp.`.
+- `Alt+P .` re-runs the last run.
+- The layout menu also takes `J`/`K` for up/down, and `Tab` cycles the graph
+  toolbar buttons (wrapping) with a visible focus outline; Enter activates the
+  focused button.
+- `Alt+P T` focuses the Tasks view (like `Alt+P P`).
+- The task picker opens with the tree's task as the highlighted first entry —
+  select a task (or one of its files) in the Tasks view, press `S`, hit Enter.
+- The sidebar starts as 1:3 Tasks:Graph with Remote collapsed (initial layout
+  only; VS Code remembers whatever you drag).
+- Focused graph toolbar buttons show a visible ring — `:focus-visible`
+  heuristics proved unreliable inside the webview, so the ring is now
+  deterministic, with a fallback colour for themes without the token. The layout
+  menu's focus outline got the same fallback.
+- Saving or resetting the graph layout confirms on the status bar; reset names
+  its target (saved default or the chosen automatic layout).
+- Tab in the graph reliably focuses the toolbar buttons with a clear highlight:
+  a document-level handler routes Tab into the buttons from anywhere in the
+  webview, and the focused button takes the primary button colours with a 2px
+  focus outline.
+- In the Tasks view, `R`/`C`/`T`/`F`/`D`/`S`/`O` open the task picker on the row
+  you arrowed to, so Enter confirms it (arrow-key focus used to be ignored
+  unless the row was clicked).

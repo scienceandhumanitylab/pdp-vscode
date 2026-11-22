@@ -50,7 +50,7 @@ export const GRAPH_LAYOUTS: {
   },
   {
     label: "Force-directed",
-    description: "organic; ignores edge direction",
+    description: "organic",
     name: "force",
   },
 ];
@@ -240,7 +240,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     color: var(--vscode-button-secondaryForeground);
     border: 1px solid var(--vscode-contrastBorder, transparent); }
   #toolbar button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-  #toolbar button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+  #toolbar button:focus { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #ffffff); outline: 2px solid var(--vscode-focusBorder, #007fd4); outline-offset: 1px; }
   #layoutMenu { position: absolute; z-index: 20; padding: 2px 0; white-space: nowrap;
     background: var(--vscode-menu-background);
     color: var(--vscode-menu-foreground);
@@ -248,7 +248,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
   #layoutMenu[hidden] { display: none; }
   #layoutMenu [role="menuitemradio"] { padding: 3px 10px; cursor: pointer;
     font: 12px var(--vscode-font-family, sans-serif); }
-  #layoutMenu [role="menuitemradio"]:focus { outline: 1px solid var(--vscode-focusBorder);
+  #layoutMenu [role="menuitemradio"]:focus { outline: 1px solid var(--vscode-focusBorder, #007fd4);
     background: var(--vscode-menu-selectionBackground);
     color: var(--vscode-menu-selectionForeground); }
 </style>
@@ -351,9 +351,9 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
       event.preventDefault();
       items[next].focus();
     };
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" || event.key === "j") {
       move((i + 1) % items.length);
-    } else if (event.key === "ArrowUp") {
+    } else if (event.key === "ArrowUp" || event.key === "k") {
       move((i - 1 + items.length) % items.length);
     } else if (event.key === "Home") {
       move(0);
@@ -365,6 +365,34 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     } else if (event.key === "Escape" || event.key === "Tab") {
       closeLayoutMenu();
     }
+  });
+
+  // Tab would otherwise run off the end of the webview; wrap it instead.
+  toolbar.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") {
+      return;
+    }
+    const buttons = Array.from(toolbar.querySelectorAll("button"));
+    const i = buttons.indexOf(document.activeElement);
+    if (i === -1) {
+      return;
+    }
+    event.preventDefault();
+    const next = event.shiftKey
+      ? (i - 1 + buttons.length) % buttons.length
+      : (i + 1) % buttons.length;
+    buttons[next].focus();
+  });
+
+  // VS Code may treat the webview as one tab stop: route Tab into the
+  // toolbar from anywhere; the menu's Tab-close refocuses the layout
+  // button, which the contains-guard then respects.
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab" || event.defaultPrevented) return;
+    if (document.activeElement && toolbar.contains(document.activeElement)) return;
+    event.preventDefault();
+    const buttons = Array.from(toolbar.querySelectorAll("button"));
+    (event.shiftKey ? buttons[buttons.length - 1] : buttons[0]).focus();
   });
 
   // Focus leaving the menu, or a pointerdown outside it, dismiss it.
@@ -931,10 +959,7 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
       }
       void this.storage.update(positionsKey(root), layout);
       if (asDefault) {
-        vscode.window.setStatusBarMessage(
-          "PDP: Graph layout saved as default",
-          3000,
-        );
+        vscode.window.setStatusBarMessage("PDP: Layout saved as default", 4000);
       }
     }
   }
@@ -957,18 +982,27 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
   // refreshes never touch it.
   async resetLayout(): Promise<void> {
     const root = workspaceRoot();
+    const current = validLayout(
+      root ? this.storage.get<GraphLayout>(positionsKey(root)) : undefined,
+    );
+    const reset: GraphLayout = current.saved
+      ? { ...current.saved, saved: current.saved }
+      : { positions: {} };
+    if (current.layout) {
+      reset.layout = current.layout;
+    }
     if (root) {
-      const current = validLayout(
-        this.storage.get<GraphLayout>(positionsKey(root)),
-      );
-      const reset: GraphLayout = current.saved
-        ? { ...current.saved, saved: current.saved }
-        : { positions: {} };
-      if (current.layout) {
-        reset.layout = current.layout;
-      }
       await this.storage.update(positionsKey(root), reset);
     }
+    const label =
+      GRAPH_LAYOUTS.find((layout) => layout.name === reset.layout)?.label ??
+      GRAPH_LAYOUTS[0].label;
+    vscode.window.setStatusBarMessage(
+      current.saved
+        ? "PDP: Layout reset to saved default"
+        : `PDP: Layout reset to ${label}`,
+      4000,
+    );
     this.pushStatus();
   }
 

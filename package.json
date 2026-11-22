@@ -202,6 +202,10 @@
         "title": "PDP: Keyboard Shortcuts"
       },
       {
+        "command": "pdp.rerunLast",
+        "title": "PDP: Re-run Last Run"
+      },
+      {
         "command": "pdp.stopProcess",
         "title": "PDP: Stop Process",
         "icon": "$(debug-stop)"
@@ -220,16 +224,19 @@
       "pdp": [
         {
           "id": "pdp.tasks",
-          "name": "Tasks"
+          "name": "Tasks",
+          "initialSize": 1
         },
         {
           "type": "webview",
           "id": "pdp.graph",
-          "name": "Graph"
+          "name": "Graph",
+          "initialSize": 3
         },
         {
           "id": "pdp.remote",
-          "name": "Remote & Processes"
+          "name": "Remote & Processes",
+          "visibility": "collapsed"
         }
       ]
     },
@@ -432,6 +439,11 @@
         "when": "!terminalFocus"
       },
       {
+        "command": "pdp.tasks.focus",
+        "key": "alt+p t",
+        "when": "!terminalFocus"
+      },
+      {
         "command": "pdp.graph.focus",
         "key": "alt+p g",
         "when": "!terminalFocus"
@@ -444,6 +456,11 @@
       {
         "command": "pdp.runAll",
         "key": "alt+p space",
+        "when": "pdp.hasProject && !terminalFocus"
+      },
+      {
+        "command": "pdp.rerunLast",
+        "key": "alt+p .",
         "when": "pdp.hasProject && !terminalFocus"
       },
       {

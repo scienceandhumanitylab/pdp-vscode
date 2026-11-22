@@ -4,11 +4,15 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "../pdp";
 import { parseFreshen } from "../pdp";
-import { tasksTree } from "../extension";
+import { lastRunTracker, tasksTree } from "../extension";
 import { FileItem, PdpTasksProvider, TaskItem } from "../tasksView";
 
 // Runs against the real pdp binary in src/test/fixtures/demo, which the
 // test workspace opens (see .vscode-test.mjs).
+
+// Refreshes re-render the tree asynchronously and can move list focus.
+const settleTree = () => new Promise((resolve) => setTimeout(resolve, 300));
+
 suite("fixture integration", () => {
   test("status parses the demo project in topological order", async () => {
     const status = await pdp.status();
@@ -218,9 +222,59 @@ suite("fixture integration", () => {
     }
   });
 
+  test("keybindings act on the arrow-key focused row", async () => {
+    await pdp.spawnPdp(["run", "--to", "clean"]).done;
+    await vscode.commands.executeCommand("pdp.refresh");
+    await settleTree();
+    await vscode.commands.executeCommand("pdp.tasks.focus");
+    await settleTree();
+    await vscode.commands.executeCommand("list.focusFirst");
+    await vscode.commands.executeCommand("list.focusDown");
+    await vscode.commands.executeCommand("list.focusDown"); // rows: pdp.yml, import, clean
+    await settleTree();
+    assert.ok(tasksTree, "tasks tree not registered");
+    const beforeCommand = [...tasksTree!.selection];
+    assert.deepStrictEqual(beforeCommand, [], "arrow keys must not select");
+
+    type PickItem = { label: string };
+    let pickerItems: PickItem[] = [];
+    const originalPick = vscode.window.showQuickPick;
+    const originalExecute = vscode.commands.executeCommand;
+    const revealed: string[] = [];
+    vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
+      pickerItems = list as PickItem[];
+      return pickerItems[0];
+    }) as unknown as typeof vscode.window.showQuickPick;
+    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+      if (command === "revealInExplorer") {
+        revealed.push(String((args[0] as vscode.Uri).fsPath));
+        return Promise.resolve(undefined);
+      }
+      return originalExecute(command, ...args);
+    }) as typeof vscode.commands.executeCommand;
+    try {
+      await vscode.commands.executeCommand("pdp.revealTaskOutput", {
+        selected: true,
+      });
+    } finally {
+      vscode.window.showQuickPick = originalPick;
+      vscode.commands.executeCommand = originalExecute;
+    }
+    assert.ok(pickerItems.length, "the picker was not shown");
+    assert.strictEqual(pickerItems[0]?.label, "clean");
+    assert.deepStrictEqual(
+      [...tasksTree!.selection],
+      beforeCommand,
+      "the double toggle left a trace in the selection",
+    );
+    assert.strictEqual(revealed.length, 1);
+    assert.match(revealed[0], /clean[/\\]output$/);
+  });
+
   test("the tree selection backs the selected:true argument shape", async () => {
     await pdp.spawnPdp(["run", "--to", "clean"]).done;
     await vscode.commands.executeCommand("pdp.refresh");
+    await settleTree();
     assert.ok(tasksTree, "tasks tree not registered");
     const provider = new PdpTasksProvider();
     provider.update(await pdp.status());
@@ -228,9 +282,23 @@ suite("fixture integration", () => {
       (item) => item instanceof TaskItem,
     );
     await tasksTree!.reveal(items[0], { select: true });
+    // reveal() sets the selection but not keyboard focus, and focus is what
+    // the { selected: true } shape reads; put both on import deterministically.
+    await vscode.commands.executeCommand("pdp.tasks.focus");
+    await settleTree();
+    await vscode.commands.executeCommand("list.focusFirst");
+    await vscode.commands.executeCommand("list.focusDown"); // pdp.yml -> import
+    await settleTree();
 
+    type PickItem = { label: string };
+    let pickerItems: PickItem[] = [];
+    const originalPick = vscode.window.showQuickPick;
     const originalExecute = vscode.commands.executeCommand;
     const revealed: unknown[][] = [];
+    vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
+      pickerItems = list as PickItem[];
+      return pickerItems[0];
+    }) as unknown as typeof vscode.window.showQuickPick;
     vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
       if (command === "revealInExplorer") {
         revealed.push(args);
@@ -242,14 +310,34 @@ suite("fixture integration", () => {
       await vscode.commands.executeCommand("pdp.revealTaskOutput", {
         selected: true,
       });
+      assert.ok(pickerItems.length, "the picker was not shown");
+      assert.strictEqual(
+        pickerItems[0]?.label,
+        "import",
+        "the selected task must lead the picker",
+      );
+      assert.strictEqual(revealed.length, 1, "nothing was revealed");
+      assert.match(
+        String((revealed[0][0] as vscode.Uri).fsPath),
+        /import[/\\]output$/,
+      );
+
+      // import stays selected while focus moves on: the focused row wins.
+      await originalExecute("list.focusDown"); // import -> clean
+      await settleTree();
+      await vscode.commands.executeCommand("pdp.revealTaskOutput", {
+        selected: true,
+      });
+      assert.strictEqual(pickerItems[0]?.label, "clean");
+      assert.deepStrictEqual(
+        tasksTree!.selection.map((item) => String(item.label)),
+        ["import"],
+        "the double toggle must leave the selection as it was",
+      );
     } finally {
+      vscode.window.showQuickPick = originalPick;
       vscode.commands.executeCommand = originalExecute;
     }
-    assert.strictEqual(revealed.length, 1, "nothing was revealed");
-    assert.match(
-      String((revealed[0][0] as vscode.Uri).fsPath),
-      /import[/\\]output$/,
-    );
   });
 
   test("openTaskSrc handles zero, one and many source files", async () => {
@@ -401,5 +489,161 @@ suite("fixture integration", () => {
         args: "tasks",
       },
     ]);
+  });
+
+  test("rerunLast replays the last run; nothing recorded is explained", async () => {
+    await vscode.commands.executeCommand("pdp.refresh");
+    lastRunTracker.lastRun = null;
+    const originalInfo = vscode.window.showInformationMessage;
+    const originalSpawn = pdp.spawnPdp;
+    const infos: string[] = [];
+    const spawned: string[][] = [];
+    vscode.window.showInformationMessage = ((message: string) => {
+      infos.push(message);
+      return Promise.resolve(undefined);
+    }) as typeof vscode.window.showInformationMessage;
+    (pdp as { spawnPdp: typeof pdp.spawnPdp }).spawnPdp = (args: string[]) => {
+      spawned.push(args);
+      return {
+        done: Promise.resolve({ code: 0, stdout: "", stderr: "" }),
+        kill: () => undefined,
+      };
+    };
+    try {
+      await vscode.commands.executeCommand("pdp.rerunLast");
+      assert.deepStrictEqual(infos, ["PDP: No run yet this session"]);
+      assert.deepStrictEqual(spawned, [], "a run happened without a record");
+
+      await vscode.commands.executeCommand("pdp.runTask", "import");
+      assert.deepStrictEqual(lastRunTracker.lastRun, {
+        args: ["import"],
+        title: "PDP: Run import",
+      });
+      await vscode.commands.executeCommand("pdp.rerunLast");
+      assert.deepStrictEqual(spawned, [
+        ["run", "import"],
+        ["run", "import"],
+      ]);
+    } finally {
+      vscode.window.showInformationMessage = originalInfo;
+      (pdp as { spawnPdp: typeof pdp.spawnPdp }).spawnPdp = originalSpawn;
+      lastRunTracker.lastRun = null;
+    }
+  });
+
+  test("package.json binds alt+p . to rerunLast", async () => {
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
+    const bindings = ext?.packageJSON.contributes.keybindings as {
+      command: string;
+      key: string;
+      when: string;
+    }[];
+    const binding = bindings.find((b) => b.command === "pdp.rerunLast");
+    assert.deepStrictEqual(binding, {
+      command: "pdp.rerunLast",
+      key: "alt+p .",
+      when: "pdp.hasProject && !terminalFocus",
+    });
+  });
+
+  test("package.json binds alt+p t to focus Tasks", async () => {
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
+    const bindings = ext?.packageJSON.contributes.keybindings as {
+      command: string;
+      key: string;
+      when: string;
+    }[];
+    const binding = bindings.find(
+      (b) => b.command === "pdp.tasks.focus" && b.key === "alt+p t",
+    );
+    assert.deepStrictEqual(binding, {
+      command: "pdp.tasks.focus",
+      key: "alt+p t",
+      when: "!terminalFocus",
+    });
+  });
+
+  test("the task picker defaults to the tree's selection context", async () => {
+    await pdp.spawnPdp(["run", "--to", "clean"]).done;
+    await vscode.commands.executeCommand("pdp.refresh");
+    assert.ok(tasksTree, "tasks tree not registered");
+    const provider = new PdpTasksProvider();
+    provider.update(await pdp.status());
+    // clean is not first in status order, so a moved default is detectable.
+    const cleanItem = (await provider.getChildren()).find(
+      (item) => item instanceof TaskItem && item.label === "clean",
+    ) as TaskItem;
+    const taskYml = (await provider.getChildren(cleanItem)).find(
+      (item) => item instanceof FileItem && item.label === "task.yml",
+    ) as FileItem;
+    // A file row inside clean: its owner is the default the picker opens on.
+    await tasksTree!.reveal(taskYml, { select: true });
+
+    type PickItem = { label: string; task: pdp.TaskStatus };
+    let pickerItems: PickItem[] = [];
+    const originalPick = vscode.window.showQuickPick;
+    const originalExecute = vscode.commands.executeCommand;
+    const revealed: string[] = [];
+    vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
+      pickerItems = list as PickItem[];
+      return pickerItems[0];
+    }) as unknown as typeof vscode.window.showQuickPick;
+    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+      if (command === "revealInExplorer") {
+        revealed.push(String((args[0] as vscode.Uri).fsPath));
+        return Promise.resolve(undefined);
+      }
+      return originalExecute(command, ...args);
+    }) as typeof vscode.commands.executeCommand;
+    try {
+      await vscode.commands.executeCommand("pdp.revealTaskOutput");
+    } finally {
+      vscode.window.showQuickPick = originalPick;
+      vscode.commands.executeCommand = originalExecute;
+    }
+    assert.strictEqual(pickerItems[0]?.label, "clean");
+    assert.deepStrictEqual(
+      pickerItems.slice(1).map((item) => item.label),
+      ["import", "filter", "explore", "model", "report"],
+    );
+    assert.strictEqual(revealed.length, 1);
+    assert.match(revealed[0], /clean[/\\]output$/);
+
+    // A directly selected task row is still the default (no regression).
+    await tasksTree!.reveal(cleanItem, { select: true });
+    pickerItems = [];
+    const originalPickAgain = vscode.window.showQuickPick;
+    vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
+      pickerItems = list as PickItem[];
+      return pickerItems[0];
+    }) as unknown as typeof vscode.window.showQuickPick;
+    try {
+      await vscode.commands.executeCommand("pdp.revealTaskOutput");
+    } finally {
+      vscode.window.showQuickPick = originalPickAgain;
+    }
+    assert.strictEqual(pickerItems[0]?.label, "clean");
+  });
+
+  test("the sidebar views ship with their initial proportions", async () => {
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
+    const views = ext?.packageJSON.contributes.views.pdp as Record<
+      string,
+      unknown
+    >[];
+    const byId = new Map(views.map((view) => [String(view.id), view]));
+    assert.deepStrictEqual(byId.get("pdp.tasks")?.["initialSize"], 1);
+    assert.deepStrictEqual(byId.get("pdp.graph")?.["initialSize"], 3);
+    assert.deepStrictEqual(byId.get("pdp.remote")?.["visibility"], "collapsed");
+    assert.ok(
+      !("initialSize" in (byId.get("pdp.remote") ?? {})),
+      "pdp.remote must not set initialSize",
+    );
   });
 });

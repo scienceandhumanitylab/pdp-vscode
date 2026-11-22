@@ -6,7 +6,9 @@ import { GRAPH_LAYOUTS, PdpGraphViewProvider } from "./graphView";
 import { ProcessRegistry, type TrackedProcess } from "./processes";
 import { ProcessItem, PdpRemoteProvider } from "./remoteView";
 import {
+  FileItem,
   missingTaskFolders,
+  owningTaskId,
   PdpTasksProvider,
   TaskItem,
   taskFolderPath,
@@ -171,6 +173,7 @@ function registerCommands(): vscode.Disposable[] {
     register("pdp.refresh", () => refresh(true)),
 
     register("pdp.runAll", () => runWithProgress([], "PDP: Run all")),
+    register("pdp.rerunLast", rerunLast),
     register("pdp.runPick", runPick),
     register("pdp.runTask", (arg) =>
       withTask(arg, (id) => runWithProgress([id], `PDP: Run ${id}`)),
@@ -411,7 +414,13 @@ async function spawnWithProgress(
   );
 }
 
+// The one run a keybinding can replay; exported so tests can set/inspect it.
+export const lastRunTracker: {
+  lastRun: { args: string[]; title: string } | null;
+} = { lastRun: null };
+
 async function runWithProgress(args: string[], title: string): Promise<void> {
+  lastRunTracker.lastRun = { args, title };
   await commandWithProgress(["run", ...args], title, true);
 }
 
@@ -636,6 +645,16 @@ async function chooseGraphLayout(): Promise<void> {
   }
 }
 
+// A deliberate two-key chord: replaying the last run asks no confirmation.
+async function rerunLast(): Promise<void> {
+  const last = lastRunTracker.lastRun;
+  if (!last) {
+    vscode.window.showInformationMessage("PDP: No run yet this session");
+    return;
+  }
+  await runWithProgress(last.args, last.title);
+}
+
 async function withTask(
   arg: unknown,
   action: (taskId: string) => Promise<void>,
@@ -646,23 +665,25 @@ async function withTask(
   }
 }
 
+// Arrow keys move tree focus without selecting, and the API only exposes the
+// selection; toggling twice reveals the focused row and leaves no trace.
+async function focusedTasksRow(): Promise<unknown> {
+  const before = tasksTree?.selection ?? [];
+  await vscode.commands.executeCommand("list.toggleSelection");
+  const after = tasksTree?.selection ?? [];
+  await vscode.commands.executeCommand("list.toggleSelection");
+  return (
+    after.find((item) => !before.includes(item)) ??
+    before.find((item) => !after.includes(item)) ??
+    before[0]
+  );
+}
+
 async function taskFromArgOrPick(
   arg: unknown,
 ): Promise<pdp.TaskStatus | undefined> {
   if (arg instanceof TaskItem) {
     return arg.task;
-  }
-  // Keybindings pass { selected: true }: act on the focused row when it is a
-  // task; any other selection (pdp.yml, a file) falls through to the pick.
-  if (
-    typeof arg === "object" &&
-    arg !== null &&
-    (arg as { selected?: unknown }).selected === true
-  ) {
-    const picked = tasksTree?.selection[0];
-    if (picked instanceof TaskItem) {
-      return picked.task;
-    }
   }
   // Dispatched commands pass a task id string; check its shape and validate
   // it against the last status so nothing unknown or forged reaches pdp.
@@ -680,6 +701,16 @@ async function taskFromArgOrPick(
     }
     return task;
   }
+  // Keybindings pass { selected: true }: the arrow keys may have moved focus
+  // without ever selecting, so read the focused row (the toggle trick above)
+  // instead of trusting the selection. Other argument shapes (palette,
+  // context menu on the tree) use the selection as before.
+  const contextRow =
+    typeof arg === "object" &&
+    arg !== null &&
+    (arg as { selected?: unknown }).selected === true
+      ? await focusedTasksRow()
+      : tasksTree?.selection[0];
   const tasks = lastStatus?.tasks;
   if (!tasks?.length) {
     await refresh();
@@ -689,8 +720,24 @@ async function taskFromArgOrPick(
     vscode.window.showInformationMessage("PDP: No tasks found");
     return undefined;
   }
+  // A fresh QuickPick's active item is the first entry, so the tree's
+  // context row (focused or selected task, or a file row inside a task)
+  // leads the list and Enter alone confirms it.
+  const root = pdp.workspaceRoot();
+  const defaultId =
+    contextRow instanceof TaskItem
+      ? contextRow.task.id
+      : contextRow instanceof FileItem && root
+        ? owningTaskId(list, root, contextRow.fsPath)
+        : undefined;
+  const ordered = defaultId
+    ? [
+        ...list.filter((task) => task.id === defaultId),
+        ...list.filter((task) => task.id !== defaultId),
+      ]
+    : list;
   const picked = await vscode.window.showQuickPick(
-    list.map((task) => ({
+    ordered.map((task) => ({
       label: task.id,
       description: task.stale ? "stale" : "fresh",
       task,
