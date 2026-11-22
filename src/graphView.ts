@@ -72,12 +72,13 @@ export interface GraphElement {
 
 // Pure builder for the Cytoscape elements json. Nodes get generated ids
 // (n0, n1, ...) so hostile task ids cannot forge element ids; labels carry
-// the ✗/✓ text marker next to the stale/fresh colour (ADR 0005) — the
+// the ✗/✓/⟳ text marker next to the stale/fresh/running colour (ADR 0005) — the
 // webview measures each label and sizes the box around it with PAD_X/PAD_Y.
 // Edges run from upstream to downstream; unknown depends_on ids are skipped.
 export function graphElements(
   status: ProjectStatus,
   positions: TaskPositions,
+  running: ReadonlySet<string> = new Set(),
 ): GraphElement[] {
   const index = new Map(status.tasks.map((task, i) => [task.id, i]));
   const nodes: GraphElement[] = status.tasks.map((task, i) => {
@@ -85,9 +86,13 @@ export function graphElements(
       group: "nodes",
       data: {
         id: `n${i}`,
-        label: `${task.id} ${task.stale ? "✗" : "✓"}`,
+        label: `${task.id} ${running.has(task.id) ? "⟳" : task.stale ? "✗" : "✓"}`,
       },
-      classes: task.stale ? "stale" : "fresh",
+      classes: running.has(task.id)
+        ? "running"
+        : task.stale
+          ? "stale"
+          : "fresh",
     };
     if (positions[task.id]) {
       node.position = positions[task.id];
@@ -114,10 +119,14 @@ export function graphElements(
 }
 
 // Hover text per node, in node order (n0, n1, ...): the node label is the
-// compact "id ✗/✓", so the state in words moves to the hover div.
-export function nodeLabels(status: ProjectStatus): string[] {
+// compact "id ✗/✓/⟳", so the state in words moves to the hover div.
+export function nodeLabels(
+  status: ProjectStatus,
+  running: ReadonlySet<string> = new Set(),
+): string[] {
   return status.tasks.map(
-    (task) => `${task.id} (${task.stale ? "stale" : "fresh"})`,
+    (task) =>
+      `${task.id} (${running.has(task.id) ? "running" : task.stale ? "stale" : "fresh"})`,
   );
 }
 
@@ -362,37 +371,57 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       postChooseLayout(document.activeElement.dataset.name);
-    } else if (event.key === "Escape" || event.key === "Tab") {
+    } else if (
+      event.key === "Escape" ||
+      event.key === "Tab" ||
+      // Left/Right are the toolbar navigation keys; close so focus returns
+      // to the Layout button rather than jumping to the first/last button.
+      event.key === "ArrowLeft" ||
+      event.key === "ArrowRight"
+    ) {
       closeLayoutMenu();
     }
   });
 
+  // Left/Right and j/k move between buttons like Tab does; l is the
+  // layout key, so the vim pair is j/k rather than h/l.
+  const navOffset = (key) =>
+    key === "ArrowLeft" || key === "k"
+      ? -1
+      : key === "ArrowRight" || key === "j"
+        ? 1
+        : 0;
+  const toolbarButtons = () => Array.from(toolbar.querySelectorAll("button"));
   // Tab would otherwise run off the end of the webview; wrap it instead.
   toolbar.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab") {
+    const offset = navOffset(event.key);
+    if (event.key !== "Tab" && offset === 0) {
       return;
     }
-    const buttons = Array.from(toolbar.querySelectorAll("button"));
+    const buttons = toolbarButtons();
     const i = buttons.indexOf(document.activeElement);
     if (i === -1) {
       return;
     }
     event.preventDefault();
-    const next = event.shiftKey
-      ? (i - 1 + buttons.length) % buttons.length
-      : (i + 1) % buttons.length;
-    buttons[next].focus();
+    const direction = event.key === "Tab" ? (event.shiftKey ? -1 : 1) : offset;
+    buttons[(i + direction + buttons.length) % buttons.length].focus();
   });
 
-  // VS Code may treat the webview as one tab stop: route Tab into the
-  // toolbar from anywhere; the menu's Tab-close refocuses the layout
-  // button, which the contains-guard then respects.
+  // VS Code may treat the webview as one tab stop: route Tab, arrows and j/k
+  // into the toolbar from anywhere; the menu's Tab-close refocuses the layout
+  // button, which the contains-guard then respects, and its own j/k and
+  // Left/Right close already handled those keys.
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab" || event.defaultPrevented) return;
-    if (document.activeElement && toolbar.contains(document.activeElement)) return;
+    const offset = navOffset(event.key);
+    if (event.defaultPrevented || (event.key !== "Tab" && offset === 0)) return;
+    if (document.activeElement && toolbar.contains(document.activeElement)) {
+      return;
+    }
     event.preventDefault();
-    const buttons = Array.from(toolbar.querySelectorAll("button"));
-    (event.shiftKey ? buttons[buttons.length - 1] : buttons[0]).focus();
+    const buttons = toolbarButtons();
+    const last = event.key === "Tab" ? event.shiftKey : offset < 0;
+    (last ? buttons[buttons.length - 1] : buttons[0]).focus();
   });
 
   // Focus leaving the menu, or a pointerdown outside it, dismiss it.
@@ -411,6 +440,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     true,
   );
   let cy = null;
+  let pulse = null;
   let ids = [];
   let labels = [];
   let saveTimer = null;
@@ -432,6 +462,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     const data = event.data;
     if (data.type === "empty") {
       clearTimeout(saveTimer);
+      clearInterval(pulse);
       if (cy) { cy.destroy(); cy = null; }
       toolbar.hidden = true;
       container.textContent = data.message;
@@ -626,6 +657,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
   // around it instead.
   function render(elements, preset, viewport, layoutName, dark, fontSize) {
     clearTimeout(saveTimer);
+    clearInterval(pulse);
     if (cy) { cy.destroy(); }
     tip.style.display = "none";
     container.textContent = "";
@@ -663,6 +695,12 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
         } },
         { selector: "node.stale", style: { "background-color": "#f48f84" } },
         { selector: "node.fresh", style: { "background-color": "#83a598" } },
+        { selector: "node.running", style: {
+          "background-color": "#fabd2f",
+          "border-width": 2,
+          "border-style": "dashed",
+        } },
+        { selector: "node.running.pulse", style: { "border-width": 4 } },
         { selector: "edge", style: {
           width: 1.5,
           "line-color": line,
@@ -672,6 +710,13 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
         } },
       ],
     });
+    const running = cy.nodes(".running");
+    if (
+      running.nonempty() &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      pulse = setInterval(() => running.toggleClass("pulse"), 600);
+    }
     cy.on("tap", "node", (event) => {
       vscode.postMessage({ type: "openTask", node: event.target.id() });
     });
@@ -771,6 +816,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
 export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | null = null;
   private status: ProjectStatus | null = null;
+  private running: ReadonlySet<string> = new Set();
   private defaultRequested = false;
   // focusedView misses webview iframes, so the graph sets its own context
   // key from focus messages.
@@ -892,8 +938,12 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  update(status: ProjectStatus | null): void {
+  update(
+    status: ProjectStatus | null,
+    running: ReadonlySet<string> = new Set(),
+  ): void {
     this.status = status;
+    this.running = running;
     if (this.view) {
       this.pushStatus();
     }
@@ -1076,9 +1126,9 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
         vscode.ColorThemeKind.HighContrast;
     void this.view.webview.postMessage({
       type: "render",
-      elements: graphElements(this.status, layout.positions),
+      elements: graphElements(this.status, layout.positions, this.running),
       ids: this.status.tasks.map((task) => task.id),
-      labels: nodeLabels(this.status),
+      labels: nodeLabels(this.status, this.running),
       // preset restores saved positions and the saved viewport, and the
       // webview places any task added since next to its neighbours; the
       // stored layout name runs only when nothing is saved.

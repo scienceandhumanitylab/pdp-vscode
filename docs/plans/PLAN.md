@@ -422,6 +422,37 @@ See `docs/0002-hotkeys.md` section G: status bar, tree and graph marks for the
 running task from `pdp run --progress`. Blocked on pdp ≥ 0.2.6 (section F).
 Report `docs/report/17-running-task-display.md`.
 
+### 18. Fixture src scripts and task-bar hotkeys
+
+`src/test/fixtures/demo/**`, `src/extension.ts`, `package.json`,
+`src/test/fixture.test.ts`, `docs/0002-hotkeys.md` section H.
+
+- Fixtures: every task's Makefile only delegates (`<id>:\n\tbash src/main.sh`);
+  the output touch moves into a tracked `src/main.sh` (`clean`→`done.txt`,
+  `import`/`filter`/`explore`/`model`→ `data.csv`, `report`→`report.txt`); the
+  empty `src/main.py`s go away. `model/src/main.sh` sleeps 3 s before touching,
+  so a run takes a visible moment. The `openTaskSrc` test must restore
+  `import/src/main.sh` in its `finally` — the make target now depends on it —
+  and the run-all test needs a raised mocha timeout.
+- Tasks view keys: `m` opens the Makefile or explains its absence; `M` opens it
+  or confirm-creates the stub; `S` opens the src files or confirm-creates
+  `src/main.sh` (touching `output/done.txt`); `R`/`C` modal then run/clean the
+  whole project. Task-scoped keys carry `{ selected: true }`; `R`/`C` take no
+  argument. Stubs match the fixture convention; the id is
+  `TASK_ID_PATTERN`-validated before it becomes a Makefile target. `?` cheat
+  sheet lists them all.
+- Report `docs/report/18-fixture-src-and-task-hotkeys.md`.
+
+### 19. Graph: toolbar arrows and j/k
+
+Delivered with the "Sidebar shortcuts" commit; the test assertion it broke was
+repaired afterwards. `docs/0002-hotkeys.md` section I.
+
+- Left/Right and `j`/`k` (`l` stays the layout key, so no h/l pair) move between
+  the graph toolbar buttons like `Tab`, wrapping, routed from anywhere in the
+  webview; the open layout menu keeps its own ArrowUp/Down + j/k.
+- Report `docs/report/19-graph-button-navigation.md`.
+
 ## Development
 
 ### The pdp tool

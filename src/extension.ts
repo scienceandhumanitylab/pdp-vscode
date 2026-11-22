@@ -10,6 +10,8 @@ import {
   missingTaskFolders,
   owningTaskId,
   PdpTasksProvider,
+  runningTaskIds,
+  runScope,
   TaskItem,
   taskFolderPath,
 } from "./tasksView";
@@ -23,7 +25,7 @@ export let tasksTree: vscode.TreeView<vscode.TreeItem> | null = null;
 let lastStatus: pdp.ProjectStatus | null = null;
 let lastError: string | null = null;
 let refreshing: Promise<pdp.ProjectStatus | null> | null = null;
-let refreshQueued = false;
+let refreshQueued: Promise<pdp.ProjectStatus | null> | null = null;
 let queuedNotify = false;
 const statusBar = vscode.window.createStatusBarItem(
   vscode.StatusBarAlignment.Left,
@@ -99,21 +101,22 @@ function createWatchers(): vscode.Disposable[] {
   return [...watchers, cancelPending];
 }
 
-// One status call in flight; later requests coalesce into one re-run.
+// One status call in flight; later requests coalesce into one re-run, and
+// their callers wait for that re-run, not the stale call already in flight.
 function refresh(notifyOnError = false): Promise<pdp.ProjectStatus | null> {
   if (refreshing) {
-    refreshQueued = true;
     queuedNotify = queuedNotify || notifyOnError;
-    return refreshing;
+    const rerun = () => {
+      refreshQueued = null;
+      const notify = queuedNotify;
+      queuedNotify = false;
+      return refresh(notify);
+    };
+    refreshQueued ??= refreshing.then(rerun, rerun);
+    return refreshQueued;
   }
   refreshing = doRefresh(notifyOnError).finally(() => {
     refreshing = null;
-    if (refreshQueued) {
-      refreshQueued = false;
-      const notify = queuedNotify;
-      queuedNotify = false;
-      void refresh(notify);
-    }
   });
   return refreshing;
 }
@@ -138,8 +141,12 @@ async function doRefresh(
   try {
     const status = await pdp.status();
     lastStatus = status;
-    tasksProvider.update(status);
-    graphView?.update(status);
+    const running = runningTaskIds(
+      status.tasks,
+      new Set([...activeRunScopes].flatMap((scope) => [...scope])),
+    );
+    tasksProvider.update(status, running);
+    graphView?.update(status, running);
     const stale = status.tasks.filter((task) => task.stale).length;
     statusBar.text = `$(play) PDP: ${stale} stale`;
     statusBar.tooltip = `${stale} of ${status.tasks.length} tasks are stale. Click to run the stale tasks.`;
@@ -194,14 +201,6 @@ function registerCommands(): vscode.Disposable[] {
     register("pdp.runTo", (arg) =>
       withTask(arg, (id) => runWithProgress(["--to", id], `PDP: Run to ${id}`)),
     ),
-    register("pdp.runToConfirm", (arg) =>
-      confirmThen(
-        arg,
-        "Run to",
-        "Runs pdp run --to <id>: the task and everything upstream of it.",
-        "pdp.runTo",
-      ),
-    ),
     register("pdp.runFrom", (arg) =>
       withTask(arg, (id) =>
         runWithProgress(["--from", id], `PDP: Run from ${id}`),
@@ -244,9 +243,28 @@ function registerCommands(): vscode.Disposable[] {
     register("pdp.create", createTask),
 
     register("pdp.openTask", (arg) => withTask(arg, openTaskYml)),
+    register("pdp.createTaskYml", (arg) => withTask(arg, createTaskYml)),
+    register("pdp.openTaskMakefile", (arg) => withTask(arg, openTaskMakefile)),
+    register("pdp.createTaskMakefile", (arg) =>
+      withTask(arg, createTaskMakefile),
+    ),
     register("pdp.openTaskSrc", (arg) => withTask(arg, openTaskSrc)),
+    register("pdp.createTaskSrc", (arg) => withTask(arg, createTaskSrc)),
+    register("pdp.runAllConfirm", () =>
+      confirmAll(
+        "Run all",
+        "Runs pdp run: every stale task, in dependency order.",
+        "pdp.runAll",
+      ),
+    ),
+    register("pdp.cleanAllConfirm", () =>
+      confirmAll(
+        "Clean all",
+        "Runs pdp clean, which removes every task's outputs.",
+        "pdp.cleanAll",
+      ),
+    ),
     register("pdp.revealTask", (arg) => withTask(arg, revealTaskFolder)),
-    register("pdp.revealTaskOutput", (arg) => withTask(arg, revealTaskOutput)),
     register("pdp.saveGraphLayout", () => graphView?.saveDefault()),
     register("pdp.resetGraphLayout", () => graphView?.resetLayout()),
     register("pdp.graphZoomIn", () => graphView?.zoomBy(1.25)),
@@ -386,9 +404,13 @@ interface RunResult {
   cancelled: boolean;
 }
 
+// Each in-flight run's scope: the tasks its arguments can touch.
+const activeRunScopes = new Set<ReadonlySet<string>>();
+
 async function spawnWithProgress(
   args: string[],
   title: string,
+  scope?: ReadonlySet<string>,
 ): Promise<RunResult> {
   let child: pdp.SpawnedPdp | null = null;
   let cancelled = false;
@@ -404,12 +426,22 @@ async function spawnWithProgress(
         cancelled = true;
         child?.kill("SIGINT");
       });
-      const res = await child.done;
-      return {
-        code: res.code,
-        report: pdp.reportFromOutput(res.stdout, res.stderr),
-        cancelled,
-      };
+      if (scope) {
+        activeRunScopes.add(scope);
+        void refresh();
+      }
+      try {
+        const res = await child.done;
+        return {
+          code: res.code,
+          report: pdp.reportFromOutput(res.stdout, res.stderr),
+          cancelled,
+        };
+      } finally {
+        if (scope) {
+          activeRunScopes.delete(scope);
+        }
+      }
     },
   );
 }
@@ -421,7 +453,12 @@ export const lastRunTracker: {
 
 async function runWithProgress(args: string[], title: string): Promise<void> {
   lastRunTracker.lastRun = { args, title };
-  await commandWithProgress(["run", ...args], title, true);
+  await commandWithProgress(
+    ["run", ...args],
+    title,
+    true,
+    runScope(lastStatus?.tasks ?? [], args),
+  );
 }
 
 async function remoteCommand(
@@ -436,9 +473,10 @@ async function commandWithProgress(
   args: string[],
   title: string,
   useReport: boolean,
+  scope?: ReadonlySet<string>,
 ): Promise<void> {
   try {
-    const result = await spawnWithProgress(args, title);
+    const result = await spawnWithProgress(args, title, scope);
     await refresh();
     if (useReport) {
       notifyRunResult(title, result);
@@ -568,9 +606,12 @@ const SHORTCUTS: Record<
   ],
   tasks: [
     { key: "Enter", label: "Open task.yml", command: "pdp.openTask" },
+    { key: "t", label: "Open task.yml", command: "pdp.openTask" },
+    { key: "T", label: "Create task.yml…", command: "pdp.createTaskYml" },
     { key: "r", label: "Run task", command: "pdp.runTaskConfirm" },
+    { key: "R", label: "Run all tasks", command: "pdp.runAllConfirm" },
     { key: "c", label: "Clean task", command: "pdp.cleanTaskConfirm" },
-    { key: "t", label: "Run to here", command: "pdp.runToConfirm" },
+    { key: "C", label: "Clean all tasks", command: "pdp.cleanAllConfirm" },
     {
       key: "f",
       label: "Freshen task (and downstream)",
@@ -579,9 +620,15 @@ const SHORTCUTS: Record<
     { key: "d", label: "Delete task…", command: "pdp.deleteTask" },
     { key: "s", label: "Open source file", command: "pdp.openTaskSrc" },
     {
-      key: "o",
-      label: "Reveal output folder",
-      command: "pdp.revealTaskOutput",
+      key: "S",
+      label: "Create source file…",
+      command: "pdp.createTaskSrc",
+    },
+    { key: "m", label: "Open Makefile", command: "pdp.openTaskMakefile" },
+    {
+      key: "M",
+      label: "Create Makefile…",
+      command: "pdp.createTaskMakefile",
     },
   ],
 };
@@ -705,12 +752,13 @@ async function taskFromArgOrPick(
   // without ever selecting, so read the focused row (the toggle trick above)
   // instead of trusting the selection. Other argument shapes (palette,
   // context menu on the tree) use the selection as before.
-  const contextRow =
+  const fromKeybinding =
     typeof arg === "object" &&
     arg !== null &&
-    (arg as { selected?: unknown }).selected === true
-      ? await focusedTasksRow()
-      : tasksTree?.selection[0];
+    (arg as { selected?: unknown }).selected === true;
+  const contextRow = fromKeybinding
+    ? await focusedTasksRow()
+    : tasksTree?.selection[0];
   const tasks = lastStatus?.tasks;
   if (!tasks?.length) {
     await refresh();
@@ -720,9 +768,7 @@ async function taskFromArgOrPick(
     vscode.window.showInformationMessage("PDP: No tasks found");
     return undefined;
   }
-  // A fresh QuickPick's active item is the first entry, so the tree's
-  // context row (focused or selected task, or a file row inside a task)
-  // leads the list and Enter alone confirms it.
+  // The tree's context row: a task, or a file row inside one.
   const root = pdp.workspaceRoot();
   const defaultId =
     contextRow instanceof TaskItem
@@ -730,6 +776,13 @@ async function taskFromArgOrPick(
       : contextRow instanceof FileItem && root
         ? owningTaskId(list, root, contextRow.fsPath)
         : undefined;
+  // A key pressed on a task acts on it; the picker is only for rows with no
+  // task (pdp.yml) and for the palette.
+  if (fromKeybinding && defaultId) {
+    return list.find((task) => task.id === defaultId);
+  }
+  // A fresh QuickPick's active item is the first entry, so the context row
+  // leads the list and Enter alone confirms it.
   const ordered = defaultId
     ? [
         ...list.filter((task) => task.id === defaultId),
@@ -990,24 +1043,6 @@ async function revealTaskFolder(id: string): Promise<void> {
   );
 }
 
-async function revealTaskOutput(id: string): Promise<void> {
-  const folder = taskFolder(id);
-  if (!folder) {
-    return;
-  }
-  const output = path.join(folder, "output");
-  if (!fs.existsSync(output)) {
-    vscode.window.showInformationMessage(
-      `PDP: ${id} has no output/ folder yet`,
-    );
-    return;
-  }
-  await vscode.commands.executeCommand(
-    "revealInExplorer",
-    vscode.Uri.file(output),
-  );
-}
-
 async function openTaskSrc(id: string): Promise<void> {
   const folder = taskFolder(id);
   if (!folder) {
@@ -1043,6 +1078,127 @@ async function openTaskSrc(id: string): Promise<void> {
     await vscode.window.showTextDocument(
       await vscode.workspace.openTextDocument(picked.uri),
     );
+  }
+}
+
+async function openTaskMakefile(id: string): Promise<void> {
+  const folder = taskFolder(id);
+  if (!folder) {
+    return;
+  }
+  const uri = vscode.Uri.file(path.join(folder, "Makefile"));
+  if (!fs.existsSync(uri.fsPath)) {
+    vscode.window.showInformationMessage(`PDP: No Makefile for ${id}`);
+    return;
+  }
+  await vscode.window.showTextDocument(
+    await vscode.workspace.openTextDocument(uri),
+  );
+}
+
+// The id becomes file content (a Makefile target, a YAML name), so it is
+// TASK_ID_PATTERN-validated here: keybinding and QuickPick paths hand it over
+// straight from pdp output, which is untrusted.
+async function createTaskFile(
+  id: string,
+  file: string,
+  content: string,
+  detail: string,
+  open: (id: string) => Promise<void>,
+): Promise<void> {
+  if (!TASK_ID_PATTERN.test(id)) {
+    vscode.window.showWarningMessage(`PDP: Invalid task id "${id}"`);
+    return;
+  }
+  const folder = taskFolder(id);
+  if (!folder || !fs.existsSync(folder)) {
+    vscode.window.showInformationMessage(`PDP: No folder for ${id}`);
+    return;
+  }
+  const target = path.join(folder, file);
+  if (fs.existsSync(target)) {
+    await open(id);
+    return;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    `Create ${file} for "${id}"?`,
+    { modal: true, detail },
+    "Create",
+  );
+  if (choice !== "Create") {
+    return;
+  }
+  // wx: never follow or overwrite something that appeared during the modal.
+  fs.writeFileSync(target, content, { flag: "wx" });
+  await open(id);
+}
+
+// The stub Makefile delegates to the task's src, matching the fixture and
+// scaffold convention.
+const createTaskMakefile = (id: string) =>
+  createTaskFile(
+    id,
+    "Makefile",
+    `${id}:\n\tbash src/main.sh\n`,
+    `Writes a "${id}" target that runs the task's src/main.sh with bash.`,
+    openTaskMakefile,
+  );
+
+// The same stub `pdp create` writes.
+const createTaskYml = (id: string) =>
+  createTaskFile(
+    id,
+    "task.yml",
+    `name: ${id}\nentrypoint: ''\ndepends_on: []\n`,
+    "Writes the task.yml `pdp create` would: no entrypoint, no dependencies.",
+    openTaskYml,
+  );
+
+const SRC_STUB = `#!/bin/sh\nmkdir -p output\ntouch output/done.txt\n`;
+
+async function createTaskSrc(id: string): Promise<void> {
+  const folder = taskFolder(id);
+  if (!folder || !fs.existsSync(folder)) {
+    vscode.window.showInformationMessage(`PDP: No folder for ${id}`);
+    return;
+  }
+  const src = path.join(folder, "src");
+  const uris = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(src, "**/*"),
+  );
+  if (uris.length > 0) {
+    await openTaskSrc(id);
+    return;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    `Create src/main.sh for "${id}"?`,
+    {
+      modal: true,
+      detail: "Writes a script that creates output/ and touches done.txt.",
+    },
+    "Create",
+  );
+  if (choice !== "Create") {
+    return;
+  }
+  fs.mkdirSync(src, { recursive: true });
+  fs.writeFileSync(path.join(src, "main.sh"), SRC_STUB);
+  await openTaskSrc(id);
+}
+
+// R and C act on the whole project, so there is no task to pick or confirm.
+async function confirmAll(
+  verb: string,
+  detail: string,
+  command: string,
+): Promise<void> {
+  const choice = await vscode.window.showWarningMessage(
+    `${verb} tasks?`,
+    { modal: true, detail },
+    verb,
+  );
+  if (choice === verb) {
+    await vscode.commands.executeCommand(command);
   }
 }
 

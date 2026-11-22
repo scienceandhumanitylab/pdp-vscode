@@ -7,6 +7,23 @@ to structure this file.
 
 ## [Unreleased]
 
+- `t` in the Tasks view opens the task's `task.yml` (it used to run to the task;
+  **Run to here** stays on the right-click menus), and `Shift+T` offers to
+  create a missing `task.yml` with the stub `pdp create` writes.
+- Task keys in the Tasks view (`r`, `c`, `s`, …) act on the highlighted task
+  straight away: `r` asks only "Run "clean"?" instead of opening a task picker
+  first. The picker remains for the `pdp.yml` row and the palette.
+- A running task is visible: during a run the task pdp is working on turns
+  yellow with a dashed, pulsing border and a ⟳ marker in the graph (hover says
+  "running"), and shows a spinning icon and "running" in the Tasks view. The
+  pulse respects reduced motion.
+- The Tasks view gets Makefile/source keys: `m` opens the task's Makefile
+  (explaining its absence), `Shift+M`/`Shift+S` offer to create a missing
+  Makefile/`src/main.sh` (opening the existing file when there is one),
+  `Shift+R` and `Shift+C` run/clean every task after a confirmation, and the `?`
+  cheat sheet lists them all.
+- The graph toolbar cycles with `Left`/`Right` (and `j`/`k`; `l` stays the
+  layout key) in addition to `Tab`.
 - Initial release
 - pdp ≥ 0.2.5 (the first release on PyPI, as `pdp-helper`) is now the minimum;
   the upgrade hint says `uv tool upgrade pdp-helper`.

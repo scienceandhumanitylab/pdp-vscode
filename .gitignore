@@ -6,6 +6,8 @@ node_modules
 *.swp
 media/cytoscape.min.js
 src/test/fixtures/**/output/
-src/test/fixtures/**/input/
+# pdp validates that input/ exists; its symlinks are rewritten on every run
+src/test/fixtures/**/input/*
+!src/test/fixtures/**/input/.gitkeep
 # written by the test host when it opens the fixture as a workspace
 src/test/fixtures/**/.vscode/

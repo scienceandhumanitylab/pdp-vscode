@@ -71,10 +71,6 @@
         "title": "PDP: Run Task (Confirm)"
       },
       {
-        "command": "pdp.runToConfirm",
-        "title": "PDP: Run To Here (Confirm)"
-      },
-      {
         "command": "pdp.runFrom",
         "title": "PDP: Run From Here"
       },
@@ -117,6 +113,10 @@
         "title": "PDP: Open task.yml"
       },
       {
+        "command": "pdp.createTaskYml",
+        "title": "PDP: Create Task task.yml"
+      },
+      {
         "command": "pdp.revealTask",
         "title": "PDP: Reveal Task Folder"
       },
@@ -125,8 +125,24 @@
         "title": "PDP: Open Task Source File"
       },
       {
-        "command": "pdp.revealTaskOutput",
-        "title": "PDP: Reveal Task Output"
+        "command": "pdp.createTaskSrc",
+        "title": "PDP: Create Task Source File"
+      },
+      {
+        "command": "pdp.openTaskMakefile",
+        "title": "PDP: Open Task Makefile"
+      },
+      {
+        "command": "pdp.createTaskMakefile",
+        "title": "PDP: Create Task Makefile"
+      },
+      {
+        "command": "pdp.runAllConfirm",
+        "title": "PDP: Run All (Confirm)"
+      },
+      {
+        "command": "pdp.cleanAllConfirm",
+        "title": "PDP: Clean All (Confirm)"
       },
       {
         "command": "pdp.resetGraphLayout",
@@ -254,11 +270,15 @@
           "when": "false"
         },
         {
-          "command": "pdp.runToConfirm",
+          "command": "pdp.cleanTaskConfirm",
           "when": "false"
         },
         {
-          "command": "pdp.cleanTaskConfirm",
+          "command": "pdp.runAllConfirm",
+          "when": "false"
+        },
+        {
+          "command": "pdp.cleanAllConfirm",
           "when": "false"
         }
       ],
@@ -505,8 +525,16 @@
         }
       },
       {
-        "command": "pdp.runToConfirm",
+        "command": "pdp.openTask",
         "key": "t",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.createTaskYml",
+        "key": "shift+t",
         "when": "focusedView == pdp.tasks && !terminalFocus",
         "args": {
           "selected": true
@@ -537,12 +565,38 @@
         }
       },
       {
-        "command": "pdp.revealTaskOutput",
-        "key": "o",
+        "command": "pdp.createTaskSrc",
+        "key": "shift+s",
         "when": "focusedView == pdp.tasks && !terminalFocus",
         "args": {
           "selected": true
         }
+      },
+      {
+        "command": "pdp.openTaskMakefile",
+        "key": "m",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.createTaskMakefile",
+        "key": "shift+m",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.runAllConfirm",
+        "key": "shift+r",
+        "when": "focusedView == pdp.tasks && !terminalFocus"
+      },
+      {
+        "command": "pdp.cleanAllConfirm",
+        "key": "shift+c",
+        "when": "focusedView == pdp.tasks && !terminalFocus"
       },
       {
         "command": "pdp.showShortcuts",

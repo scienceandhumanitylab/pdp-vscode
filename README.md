@@ -24,14 +24,6 @@ using the terminal.
   uv tool upgrade pdp-helper
   ```
 
-## Installation
-
-Search for **PDP** in the Extensions view, or:
-
-```sh
-code --install-extension scienceandhumanitylab.pdp
-```
-
 ## Settings
 
 | Setting             | Default | Meaning                                                |
@@ -39,33 +31,6 @@ code --install-extension scienceandhumanitylab.pdp
 | `pdp.path`          | `pdp`   | Path to the pdp binary, e.g. `/path/to/.venv/bin/pdp`  |
 | `pdp.dagsterPort`   | `3000`  | Port for the local Dagster UI started from the sidebar |
 | `pdp.graphFontSize` | `14`    | Font size (px) of the task graph node labels           |
-
-## First use
-
-1. Open the folder that contains (or will contain) your `pdp.yml` — one project
-   per workspace, at the root.
-2. The **PDP icon** appears in the activity bar. If there is no `pdp.yml` yet,
-   the Tasks view shows an **Init project** button (or run **PDP: Init Project**
-   from the command palette) and asks for a name.
-3. The Tasks view starts with a `pdp.yml` row, then lists your tasks in
-   topological order. Each shows a **stale** or **fresh** label with its own
-   icon. Expand a task to see its Slurm flags, then its folder's files. Click a
-   task to open its `task.yml`, where its dependencies and entrypoint are
-   configured, or click a file to open it.
-4. The status bar shows `PDP: N stale` — click it to run all stale tasks.
-
-The view refreshes automatically. Every pdp invocation and its full output goes
-to the **Output → PDP** channel. Error notifications have a **Show Output**
-button. Files created in a task folder outside those watched paths need a manual
-**Refresh** to appear in the tree.
-
-If a refresh fails (say, a broken `task.yml`), the sidebar keeps the last good
-status, the status bar shows `PDP` with an error icon, and you get a
-notification whenever the error changes.
-
-If `pdp.yml` lists a task whose folder is gone (deleted by hand, say), the
-extension asks once per session whether to scaffold the folders again or remove
-the entries from `pdp.yml`.
 
 ## Commands
 
@@ -122,10 +87,11 @@ moving the rest. The toolbar's **Layout** picks top-down, left-right or
 force-directed and re-lays the graph out. **Save** keeps your arrangement as the
 default, and **Reset** returns to it (or, with nothing saved, to the automatic
 layout). Every toolbar action is also in the command palette. Nodes are labelled
-`task ✗` / `task ✓` and coloured stale/fresh and follow your colour theme. Hover
-a node for its full state. Click a node to open that task's `task.yml`.
-Right-click it for the task menu (run variants, Freshen, Clean, Open task.yml,
-Delete…).
+`task ✗` / `task ✓` and coloured stale/fresh and follow your colour theme;
+during a run the task being worked on shows `task ⟳` in yellow with a pulsing
+dashed border (still when your system asks for reduced motion). Hover a node for
+its full state. Click a node to open that task's `task.yml`. Right-click it for
+the task menu (run variants, Freshen, Clean, Open task.yml, Delete…).
 
 ## Dagster and the cluster
 

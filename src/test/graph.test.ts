@@ -8,6 +8,7 @@ import {
   positionsKey,
 } from "../graphView";
 import { parseStatus, workspaceRoot } from "../pdp";
+import { runningTaskIds, runScope } from "../tasksView";
 
 const status = parseStatus(
   JSON.stringify({
@@ -102,6 +103,44 @@ suite("graph", () => {
       "clean (fresh)",
       "report (stale)",
     ]);
+  });
+
+  test("a run's running tasks are in scope, stale, with a fresh upstream", () => {
+    const all = new Set(status.tasks.map((task) => task.id));
+    assert.deepStrictEqual(
+      [...runningTaskIds(status.tasks, all)],
+      ["fetch", "report"],
+    );
+    assert.deepStrictEqual(
+      [...runningTaskIds(status.tasks, new Set(["fetch"]))],
+      ["fetch"],
+    );
+    assert.deepStrictEqual([...runningTaskIds(status.tasks, new Set())], []);
+    // report waits on its stale upstream once clean is stale too.
+    const waiting = status.tasks.map((task) => ({ ...task, stale: true }));
+    assert.deepStrictEqual([...runningTaskIds(waiting, all)], ["fetch"]);
+  });
+
+  test("runScope follows pdp run's selection arguments", () => {
+    const scope = (args: string[]) => [...runScope(status.tasks, args)].sort();
+    assert.deepStrictEqual(scope([]), ["clean", "fetch", "report"]);
+    assert.deepStrictEqual(scope(["--runner", "pdp"]), [
+      "clean",
+      "fetch",
+      "report",
+    ]);
+    assert.deepStrictEqual(scope(["clean"]), ["clean", "fetch"]);
+    assert.deepStrictEqual(scope(["--to", "clean"]), ["clean", "fetch"]);
+    assert.deepStrictEqual(scope(["clean", "--only"]), ["clean"]);
+    assert.deepStrictEqual(scope(["--from", "clean"]), ["clean", "report"]);
+  });
+
+  test("running tasks get their own marker, class and hover text", () => {
+    const running = new Set(["fetch"]);
+    const fetch = graphElements(status, {}, running)[0];
+    assert.strictEqual(fetch.data.label, "fetch ⟳");
+    assert.strictEqual(fetch.classes, "running");
+    assert.strictEqual(nodeLabels(status, running)[0], "fetch (running)");
   });
 
   test("a taskMenu message maps the node back to its id, and the render carries elements, ids, labels and font size", async () => {
@@ -580,21 +619,27 @@ suite("graph", () => {
       "focused toolbar button is not unmistakable",
     );
     assert.ok(
-      view.webview.html.includes(`event.key !== "Tab"`) &&
-        view.webview.html.includes("buttons[next].focus();"),
-      "no Tab wrap handler on the toolbar",
+      view.webview.html.includes('key === "ArrowLeft" || key === "k"') &&
+        view.webview.html.includes('key === "ArrowRight" || key === "j"'),
+      "no Left/Right and j/k toolbar navigation (l is the layout key)",
     );
     assert.ok(
       view.webview.html.includes(
-        'if (event.key !== "Tab" || event.defaultPrevented) return;',
+        "buttons[(i + direction + buttons.length) % buttons.length].focus();",
+      ),
+      "no wrap-around focus move on the toolbar",
+    );
+    assert.ok(
+      view.webview.html.includes(
+        'if (event.defaultPrevented || (event.key !== "Tab" && offset === 0)) return;',
       ) &&
         view.webview.html.includes(
           "toolbar.contains(document.activeElement)",
         ) &&
         view.webview.html.includes(
-          "(event.shiftKey ? buttons[buttons.length - 1] : buttons[0]).focus();",
+          "(last ? buttons[buttons.length - 1] : buttons[0]).focus();",
         ),
-      "no document-level Tab routing into the toolbar",
+      "no document-level Tab, arrow and j/k routing into the toolbar",
     );
     provider.dispose();
   });

@@ -4,14 +4,15 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "../pdp";
 import { parseFreshen } from "../pdp";
-import { lastRunTracker, tasksTree } from "../extension";
+import { graphView, lastRunTracker, tasksTree } from "../extension";
 import { FileItem, PdpTasksProvider, TaskItem } from "../tasksView";
 
 // Runs against the real pdp binary in src/test/fixtures/demo, which the
 // test workspace opens (see .vscode-test.mjs).
 
-// Refreshes re-render the tree asynchronously and can move list focus.
-const settleTree = () => new Promise((resolve) => setTimeout(resolve, 300));
+// The output-file watcher's debounced refresh (500 ms) re-renders the tree;
+// wait it out before revealing rows in it.
+const settleWatcher = () => new Promise((resolve) => setTimeout(resolve, 700));
 
 suite("fixture integration", () => {
   test("status parses the demo project in topological order", async () => {
@@ -23,6 +24,7 @@ suite("fixture integration", () => {
     );
   });
 
+  // model's src sleeps 3 s, so a full run needs more than mocha's 2 s default.
   test("run all reports every task and leaves them fresh", async () => {
     await pdp.exec(["clean"]);
     const child = pdp.spawnPdp(["run"]);
@@ -56,7 +58,32 @@ suite("fixture integration", () => {
       ["import", "clean", "filter", "explore", "model", "report"],
     );
     assert.strictEqual(items[0].command?.command, "pdp.openTask");
-  });
+  }).timeout(20000);
+
+  test("a run marks model running while its script sleeps, then clears", async () => {
+    await pdp.exec(["clean"]);
+    await vscode.commands.executeCommand("pdp.refresh");
+    const view = graphView!;
+    const originalUpdate = view.update;
+    const seen = new Set<string>();
+    let last: ReadonlySet<string> | undefined;
+    view.update = (status, running) => {
+      running?.forEach((id) => seen.add(id));
+      last = running;
+      originalUpdate.call(view, status, running);
+    };
+    try {
+      await vscode.commands.executeCommand("pdp.runAll");
+    } finally {
+      view.update = originalUpdate;
+    }
+    assert.ok(seen.has("model"), `running seen: ${[...seen]}`);
+    assert.deepStrictEqual(
+      [...(last ?? [])],
+      [],
+      "running state outlived the run",
+    );
+  }).timeout(20000);
 
   test("clean returns every task to stale", async () => {
     const res = await pdp.exec(["clean"]);
@@ -178,6 +205,47 @@ suite("fixture integration", () => {
     }
   });
 
+  test("task keys act on the tree's task without a picker", async () => {
+    await vscode.commands.executeCommand("pdp.refresh");
+    assert.ok(tasksTree, "tasks tree not registered");
+    const provider = new PdpTasksProvider();
+    provider.update(await pdp.status());
+    const rows = await provider.getChildren();
+    const clean = rows.find(
+      (item) => item instanceof TaskItem && item.label === "clean",
+    )!;
+    const originalPick = vscode.window.showQuickPick;
+    const originalWarn = vscode.window.showWarningMessage;
+    let picks = 0;
+    const prompts: string[] = [];
+    vscode.window.showQuickPick = (async () => {
+      picks += 1;
+      return undefined;
+    }) as unknown as typeof vscode.window.showQuickPick;
+    vscode.window.showWarningMessage = (async (message: string) => {
+      prompts.push(message);
+      return undefined;
+    }) as typeof vscode.window.showWarningMessage;
+    try {
+      await tasksTree!.reveal(clean, { select: true, focus: true });
+      await vscode.commands.executeCommand("pdp.runTaskConfirm", {
+        selected: true,
+      });
+      assert.deepStrictEqual(prompts, ['Run "clean"?']);
+      assert.strictEqual(picks, 0, "a task row must not open the picker");
+
+      // pdp.yml names no task, so the picker is the way to choose one.
+      await tasksTree!.reveal(rows[0], { select: true, focus: true });
+      await vscode.commands.executeCommand("pdp.runTaskConfirm", {
+        selected: true,
+      });
+      assert.strictEqual(picks, 1);
+    } finally {
+      vscode.window.showQuickPick = originalPick;
+      vscode.window.showWarningMessage = originalWarn;
+    }
+  });
+
   test("commands dispatched with an unknown or flag-like task id do nothing", async () => {
     const before = vscode.window.activeTextEditor?.document.uri.fsPath;
     await vscode.commands.executeCommand("pdp.refresh");
@@ -201,15 +269,22 @@ suite("fixture integration", () => {
       when: string;
       args?: unknown;
     }[];
-    for (const [key, command] of [
-      ["r", "pdp.runTaskConfirm"],
-      ["c", "pdp.cleanTaskConfirm"],
-      ["t", "pdp.runToConfirm"],
-      ["f", "pdp.freshenTask"],
-      ["d", "pdp.deleteTask"],
-      ["s", "pdp.openTaskSrc"],
-      ["o", "pdp.revealTaskOutput"],
-    ]) {
+    // [key, command, task-scoped]: task-scoped bindings carry { selected: true }.
+    const taskBindings = [
+      ["r", "pdp.runTaskConfirm", true],
+      ["c", "pdp.cleanTaskConfirm", true],
+      ["t", "pdp.openTask", true],
+      ["shift+t", "pdp.createTaskYml", true],
+      ["f", "pdp.freshenTask", true],
+      ["d", "pdp.deleteTask", true],
+      ["s", "pdp.openTaskSrc", true],
+      ["m", "pdp.openTaskMakefile", true],
+      ["shift+m", "pdp.createTaskMakefile", true],
+      ["shift+s", "pdp.createTaskSrc", true],
+      ["shift+r", "pdp.runAllConfirm", false],
+      ["shift+c", "pdp.cleanAllConfirm", false],
+    ] as const;
+    for (const [key, command, taskScoped] of taskBindings) {
       const binding = bindings.find((b) => b.command === command);
       assert.ok(binding, `no keybinding for ${command}`);
       assert.strictEqual(binding.key, key, `${command} key`);
@@ -218,125 +293,11 @@ suite("fixture integration", () => {
         "focusedView == pdp.tasks && !terminalFocus",
         `${command} when`,
       );
-      assert.deepStrictEqual(binding.args, { selected: true }, command);
-    }
-  });
-
-  test("keybindings act on the arrow-key focused row", async () => {
-    await pdp.spawnPdp(["run", "--to", "clean"]).done;
-    await vscode.commands.executeCommand("pdp.refresh");
-    await settleTree();
-    await vscode.commands.executeCommand("pdp.tasks.focus");
-    await settleTree();
-    await vscode.commands.executeCommand("list.focusFirst");
-    await vscode.commands.executeCommand("list.focusDown");
-    await vscode.commands.executeCommand("list.focusDown"); // rows: pdp.yml, import, clean
-    await settleTree();
-    assert.ok(tasksTree, "tasks tree not registered");
-    const beforeCommand = [...tasksTree!.selection];
-    assert.deepStrictEqual(beforeCommand, [], "arrow keys must not select");
-
-    type PickItem = { label: string };
-    let pickerItems: PickItem[] = [];
-    const originalPick = vscode.window.showQuickPick;
-    const originalExecute = vscode.commands.executeCommand;
-    const revealed: string[] = [];
-    vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
-      pickerItems = list as PickItem[];
-      return pickerItems[0];
-    }) as unknown as typeof vscode.window.showQuickPick;
-    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
-      if (command === "revealInExplorer") {
-        revealed.push(String((args[0] as vscode.Uri).fsPath));
-        return Promise.resolve(undefined);
-      }
-      return originalExecute(command, ...args);
-    }) as typeof vscode.commands.executeCommand;
-    try {
-      await vscode.commands.executeCommand("pdp.revealTaskOutput", {
-        selected: true,
-      });
-    } finally {
-      vscode.window.showQuickPick = originalPick;
-      vscode.commands.executeCommand = originalExecute;
-    }
-    assert.ok(pickerItems.length, "the picker was not shown");
-    assert.strictEqual(pickerItems[0]?.label, "clean");
-    assert.deepStrictEqual(
-      [...tasksTree!.selection],
-      beforeCommand,
-      "the double toggle left a trace in the selection",
-    );
-    assert.strictEqual(revealed.length, 1);
-    assert.match(revealed[0], /clean[/\\]output$/);
-  });
-
-  test("the tree selection backs the selected:true argument shape", async () => {
-    await pdp.spawnPdp(["run", "--to", "clean"]).done;
-    await vscode.commands.executeCommand("pdp.refresh");
-    await settleTree();
-    assert.ok(tasksTree, "tasks tree not registered");
-    const provider = new PdpTasksProvider();
-    provider.update(await pdp.status());
-    const items = (await provider.getChildren()).filter(
-      (item) => item instanceof TaskItem,
-    );
-    await tasksTree!.reveal(items[0], { select: true });
-    // reveal() sets the selection but not keyboard focus, and focus is what
-    // the { selected: true } shape reads; put both on import deterministically.
-    await vscode.commands.executeCommand("pdp.tasks.focus");
-    await settleTree();
-    await vscode.commands.executeCommand("list.focusFirst");
-    await vscode.commands.executeCommand("list.focusDown"); // pdp.yml -> import
-    await settleTree();
-
-    type PickItem = { label: string };
-    let pickerItems: PickItem[] = [];
-    const originalPick = vscode.window.showQuickPick;
-    const originalExecute = vscode.commands.executeCommand;
-    const revealed: unknown[][] = [];
-    vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
-      pickerItems = list as PickItem[];
-      return pickerItems[0];
-    }) as unknown as typeof vscode.window.showQuickPick;
-    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
-      if (command === "revealInExplorer") {
-        revealed.push(args);
-        return Promise.resolve(undefined);
-      }
-      return originalExecute(command, ...args);
-    }) as typeof vscode.commands.executeCommand;
-    try {
-      await vscode.commands.executeCommand("pdp.revealTaskOutput", {
-        selected: true,
-      });
-      assert.ok(pickerItems.length, "the picker was not shown");
-      assert.strictEqual(
-        pickerItems[0]?.label,
-        "import",
-        "the selected task must lead the picker",
-      );
-      assert.strictEqual(revealed.length, 1, "nothing was revealed");
-      assert.match(
-        String((revealed[0][0] as vscode.Uri).fsPath),
-        /import[/\\]output$/,
-      );
-
-      // import stays selected while focus moves on: the focused row wins.
-      await originalExecute("list.focusDown"); // import -> clean
-      await settleTree();
-      await vscode.commands.executeCommand("pdp.revealTaskOutput", {
-        selected: true,
-      });
-      assert.strictEqual(pickerItems[0]?.label, "clean");
       assert.deepStrictEqual(
-        tasksTree!.selection.map((item) => String(item.label)),
-        ["import"],
-        "the double toggle must leave the selection as it was",
+        binding.args,
+        taskScoped ? { selected: true } : undefined,
+        command,
       );
-    } finally {
-      vscode.window.showQuickPick = originalPick;
-      vscode.commands.executeCommand = originalExecute;
     }
   });
 
@@ -392,8 +353,13 @@ suite("fixture integration", () => {
     } finally {
       vscode.window.showInformationMessage = originalInfo;
       vscode.window.showQuickPick = originalPick;
+      // The make target runs src/main.sh, so the fixture must keep it.
       fs.rmSync(src, { recursive: true, force: true });
       fs.mkdirSync(src, { recursive: true });
+      fs.writeFileSync(
+        path.join(src, "main.sh"),
+        "#!/bin/sh\nmkdir -p output\ntouch output/data.csv\n",
+      );
     }
   });
 
@@ -425,6 +391,188 @@ suite("fixture integration", () => {
     }
   });
 
+  test("runAllConfirm and cleanAllConfirm run only when the modal says yes", async () => {
+    const originalWarn = vscode.window.showWarningMessage;
+    const originalExecute = vscode.commands.executeCommand;
+    const ran: string[] = [];
+    let answer: string | undefined;
+    vscode.window.showWarningMessage = (async () =>
+      answer) as typeof vscode.window.showWarningMessage;
+    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+      if (command === "pdp.runAll" || command === "pdp.cleanAll") {
+        ran.push(command);
+        return Promise.resolve(undefined);
+      }
+      return originalExecute(command, ...args);
+    }) as typeof vscode.commands.executeCommand;
+    try {
+      await vscode.commands.executeCommand("pdp.runAllConfirm");
+      await vscode.commands.executeCommand("pdp.cleanAllConfirm");
+      assert.deepStrictEqual(ran, [], "dismissed modals still ran");
+
+      answer = "Run all";
+      await vscode.commands.executeCommand("pdp.runAllConfirm");
+      answer = "Clean all";
+      await vscode.commands.executeCommand("pdp.cleanAllConfirm");
+      assert.deepStrictEqual(ran, ["pdp.runAll", "pdp.cleanAll"]);
+    } finally {
+      vscode.window.showWarningMessage = originalWarn;
+      vscode.commands.executeCommand = originalExecute;
+    }
+  });
+
+  test("openTaskMakefile opens the Makefile or explains its absence", async () => {
+    const makefile = path.join(pdp.workspaceRoot()!, "clean", "Makefile");
+    const originalInfo = vscode.window.showInformationMessage;
+    const infos: string[] = [];
+    vscode.window.showInformationMessage = ((message: string) => {
+      infos.push(message);
+      return Promise.resolve(undefined);
+    }) as typeof vscode.window.showInformationMessage;
+    try {
+      await vscode.commands.executeCommand("pdp.openTaskMakefile", "clean");
+      assert.deepStrictEqual(infos, []);
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /clean[/\\]Makefile$/,
+      );
+
+      fs.rmSync(makefile);
+      await vscode.commands.executeCommand("pdp.openTaskMakefile", "clean");
+      assert.deepStrictEqual(infos, ["PDP: No Makefile for clean"]);
+    } finally {
+      fs.writeFileSync(makefile, "clean:\n\tbash src/main.sh\n");
+      vscode.window.showInformationMessage = originalInfo;
+    }
+  });
+
+  test("createTaskMakefile opens existing, prompts before creating", async () => {
+    const makefile = path.join(pdp.workspaceRoot()!, "clean", "Makefile");
+    const originalWarn = vscode.window.showWarningMessage;
+    let answer: string | undefined;
+    let prompts = 0;
+    vscode.window.showWarningMessage = (async () => {
+      prompts += 1;
+      return answer;
+    }) as typeof vscode.window.showWarningMessage;
+    try {
+      // Existing Makefile: open it, no prompt.
+      await vscode.commands.executeCommand("pdp.createTaskMakefile", "clean");
+      assert.strictEqual(prompts, 0);
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /clean[/\\]Makefile$/,
+      );
+
+      // Missing Makefile, dismissed prompt: nothing is written.
+      fs.rmSync(makefile);
+      await vscode.commands.executeCommand("pdp.createTaskMakefile", "clean");
+      assert.strictEqual(prompts, 1);
+      assert.ok(!fs.existsSync(makefile));
+
+      // Missing Makefile, accepted prompt: the stub is written and opened.
+      answer = "Create";
+      await vscode.commands.executeCommand("pdp.createTaskMakefile", "clean");
+      assert.strictEqual(prompts, 2);
+      assert.strictEqual(
+        fs.readFileSync(makefile, "utf8"),
+        "clean:\n\tbash src/main.sh\n",
+      );
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /clean[/\\]Makefile$/,
+      );
+    } finally {
+      fs.writeFileSync(makefile, "clean:\n\tbash src/main.sh\n");
+      vscode.window.showWarningMessage = originalWarn;
+    }
+  });
+
+  test("createTaskYml opens existing, prompts before creating", async () => {
+    const taskYml = path.join(pdp.workspaceRoot()!, "clean", "task.yml");
+    const original = fs.readFileSync(taskYml, "utf8");
+    const originalWarn = vscode.window.showWarningMessage;
+    let answer: string | undefined;
+    let prompts = 0;
+    vscode.window.showWarningMessage = (async () => {
+      prompts += 1;
+      return answer;
+    }) as typeof vscode.window.showWarningMessage;
+    try {
+      // Existing task.yml: open it, no prompt.
+      await vscode.commands.executeCommand("pdp.createTaskYml", "clean");
+      assert.strictEqual(prompts, 0);
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /clean[/\\]task\.yml$/,
+      );
+
+      // Missing task.yml, dismissed prompt: nothing is written.
+      fs.rmSync(taskYml);
+      await vscode.commands.executeCommand("pdp.createTaskYml", "clean");
+      assert.strictEqual(prompts, 1);
+      assert.ok(!fs.existsSync(taskYml));
+
+      // Missing task.yml, accepted prompt: pdp create's stub is written.
+      answer = "Create";
+      await vscode.commands.executeCommand("pdp.createTaskYml", "clean");
+      assert.strictEqual(prompts, 2);
+      assert.strictEqual(
+        fs.readFileSync(taskYml, "utf8"),
+        "name: clean\nentrypoint: ''\ndepends_on: []\n",
+      );
+    } finally {
+      fs.writeFileSync(taskYml, original);
+      vscode.window.showWarningMessage = originalWarn;
+    }
+  });
+
+  test("createTaskSrc opens existing files and creates main.sh when src is empty", async () => {
+    const src = path.join(pdp.workspaceRoot()!, "import", "src");
+    const mainSh = path.join(src, "main.sh");
+    const originalWarn = vscode.window.showWarningMessage;
+    let answer: string | undefined;
+    let prompts = 0;
+    vscode.window.showWarningMessage = (async () => {
+      prompts += 1;
+      return answer;
+    }) as typeof vscode.window.showWarningMessage;
+    try {
+      // Existing src files: open them, no prompt.
+      await vscode.commands.executeCommand("pdp.createTaskSrc", "import");
+      assert.strictEqual(prompts, 0);
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /import[/\\]src[/\\]main\.sh$/,
+      );
+
+      // Empty src, dismissed prompt: nothing is written.
+      fs.rmSync(mainSh);
+      await vscode.commands.executeCommand("pdp.createTaskSrc", "import");
+      assert.strictEqual(prompts, 1);
+      assert.ok(!fs.existsSync(mainSh));
+
+      // Empty src, accepted prompt: the stub is written and opened.
+      answer = "Create";
+      await vscode.commands.executeCommand("pdp.createTaskSrc", "import");
+      assert.strictEqual(prompts, 2);
+      assert.strictEqual(
+        fs.readFileSync(mainSh, "utf8"),
+        "#!/bin/sh\nmkdir -p output\ntouch output/done.txt\n",
+      );
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /import[/\\]src[/\\]main\.sh$/,
+      );
+    } finally {
+      fs.writeFileSync(
+        mainSh,
+        "#!/bin/sh\nmkdir -p output\ntouch output/data.csv\n",
+      );
+      vscode.window.showWarningMessage = originalWarn;
+    }
+  });
+
   test("showShortcuts with 'tasks' lists the tasks keys only", async () => {
     await vscode.commands.executeCommand("pdp.refresh");
     type ShortcutItem = { label: string; description?: string };
@@ -434,7 +582,7 @@ suite("fixture integration", () => {
     const ran: { command: string; args: unknown[] }[] = [];
     vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
       items = list as ShortcutItem[];
-      return items[1];
+      return items.find((item) => item.label === "r");
     }) as unknown as typeof vscode.window.showQuickPick;
     vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
       if (command.startsWith("pdp.") && command !== "pdp.showShortcuts") {
@@ -450,10 +598,24 @@ suite("fixture integration", () => {
       vscode.commands.executeCommand = originalExecute;
     }
     const keys = items.map((item) => String(item.label));
-    for (const key of ["Enter", "r", "c", "t", "f", "d", "s", "o"]) {
+    for (const key of [
+      "Enter",
+      "r",
+      "c",
+      "t",
+      "T",
+      "f",
+      "d",
+      "s",
+      "m",
+      "M",
+      "S",
+      "R",
+      "C",
+    ]) {
       assert.ok(keys.includes(key), `missing tasks key ${key}`);
     }
-    for (const graphKey of ["i", "l"]) {
+    for (const graphKey of ["i", "o", "l"]) {
       assert.ok(!keys.includes(graphKey), `graph key ${graphKey} leaked in`);
     }
     // Picking the r entry runs its command against the tree selection.
@@ -569,6 +731,7 @@ suite("fixture integration", () => {
 
   test("the task picker defaults to the tree's selection context", async () => {
     await pdp.spawnPdp(["run", "--to", "clean"]).done;
+    await settleWatcher();
     await vscode.commands.executeCommand("pdp.refresh");
     assert.ok(tasksTree, "tasks tree not registered");
     const provider = new PdpTasksProvider();
@@ -600,7 +763,7 @@ suite("fixture integration", () => {
       return originalExecute(command, ...args);
     }) as typeof vscode.commands.executeCommand;
     try {
-      await vscode.commands.executeCommand("pdp.revealTaskOutput");
+      await vscode.commands.executeCommand("pdp.revealTask");
     } finally {
       vscode.window.showQuickPick = originalPick;
       vscode.commands.executeCommand = originalExecute;
@@ -611,7 +774,7 @@ suite("fixture integration", () => {
       ["import", "filter", "explore", "model", "report"],
     );
     assert.strictEqual(revealed.length, 1);
-    assert.match(revealed[0], /clean[/\\]output$/);
+    assert.match(revealed[0], /[/\\]clean$/);
 
     // A directly selected task row is still the default (no regression).
     await tasksTree!.reveal(cleanItem, { select: true });
@@ -622,12 +785,12 @@ suite("fixture integration", () => {
       return pickerItems[0];
     }) as unknown as typeof vscode.window.showQuickPick;
     try {
-      await vscode.commands.executeCommand("pdp.revealTaskOutput");
+      await vscode.commands.executeCommand("pdp.revealTask");
     } finally {
       vscode.window.showQuickPick = originalPickAgain;
     }
     assert.strictEqual(pickerItems[0]?.label, "clean");
-  });
+  }).timeout(10000);
 
   test("the sidebar views ship with their initial proportions", async () => {
     const ext = vscode.extensions.getExtension(

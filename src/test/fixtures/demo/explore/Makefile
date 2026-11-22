@@ -1,3 +1,2 @@
 explore:
-	mkdir -p output
-	touch output/data.csv
+	bash src/main.sh

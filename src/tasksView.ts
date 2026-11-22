@@ -75,7 +75,10 @@ function listFolder(folder: string): FileItem[] {
 export class TaskItem extends vscode.TreeItem {
   readonly folder: string | undefined;
 
-  constructor(readonly task: TaskStatus) {
+  constructor(
+    readonly task: TaskStatus,
+    readonly running = false,
+  ) {
     const root = workspaceRoot();
     const folder = root ? taskFolderPath(root, task.id) : undefined;
     super(
@@ -85,18 +88,23 @@ export class TaskItem extends vscode.TreeItem {
         : vscode.TreeItemCollapsibleState.None,
     );
     this.folder = folder;
-    this.description = [task.stale ? "stale" : "fresh", task.description]
+    this.description = [
+      running ? "running" : task.stale ? "stale" : "fresh",
+      task.description,
+    ]
       .filter(Boolean)
       .join(" · ");
-    this.iconPath = task.stale
-      ? new vscode.ThemeIcon(
-          "sync",
-          new vscode.ThemeColor("editorWarning.foreground"),
-        )
-      : new vscode.ThemeIcon(
-          "check",
-          new vscode.ThemeColor("testing.iconPassed"),
-        );
+    this.iconPath = running
+      ? new vscode.ThemeIcon("loading~spin")
+      : task.stale
+        ? new vscode.ThemeIcon(
+            "sync",
+            new vscode.ThemeColor("editorWarning.foreground"),
+          )
+        : new vscode.ThemeIcon(
+            "check",
+            new vscode.ThemeColor("testing.iconPassed"),
+          );
     this.contextValue = "task";
     this.command = {
       command: "pdp.openTask",
@@ -111,7 +119,12 @@ export class TaskItem extends vscode.TreeItem {
   }
 
   private tooltipText(): string {
-    const lines = [`${this.task.id} — ${this.task.stale ? "stale" : "fresh"}`];
+    const state = this.running
+      ? "running"
+      : this.task.stale
+        ? "stale"
+        : "fresh";
+    const lines = [`${this.task.id} — ${state}`];
     if (this.task.description) {
       lines.push(this.task.description);
     }
@@ -164,13 +177,87 @@ export function owningTaskId(
   return undefined;
 }
 
+// The tasks a `pdp run <args>` can touch: --from goes downstream, ids and
+// --to go upstream unless --only, and no ids means every task.
+export function runScope(tasks: TaskStatus[], args: string[]): Set<string> {
+  const ids: string[] = [];
+  let from: string | undefined;
+  let only = false;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--from") {
+      from = args[++i];
+    } else if (args[i] === "--to") {
+      ids.push(args[++i]);
+    } else if (args[i] === "--runner") {
+      i++;
+    } else if (args[i] === "--only") {
+      only = true;
+    } else if (!args[i].startsWith("-")) {
+      ids.push(args[i]);
+    }
+  }
+  if (from === undefined && ids.length === 0) {
+    return new Set(tasks.map((task) => task.id));
+  }
+  const scope = new Set(from !== undefined ? [from] : ids);
+  if (only) {
+    return scope;
+  }
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const pending = [...scope];
+  while (pending.length) {
+    const id = pending.pop()!;
+    const next =
+      from !== undefined
+        ? tasks
+            .filter((task) => task.depends_on.includes(id))
+            .map((task) => task.id)
+        : (byId.get(id)?.depends_on ?? []);
+    for (const nextId of next) {
+      if (!scope.has(nextId)) {
+        scope.add(nextId);
+        pending.push(nextId);
+      }
+    }
+  }
+  return scope;
+}
+
+// pdp prints nothing when a task starts, so during a run a task counts as
+// running when it is in the run's scope, stale, and its upstream is fresh.
+// shortcut: --force reruns of fresh tasks never show as running; upgrade if
+// pdp ever reports task starts.
+export function runningTaskIds(
+  tasks: TaskStatus[],
+  scope: ReadonlySet<string>,
+): Set<string> {
+  const stale = new Set(
+    tasks.filter((task) => task.stale).map((task) => task.id),
+  );
+  return new Set(
+    tasks
+      .filter(
+        (task) =>
+          scope.has(task.id) &&
+          stale.has(task.id) &&
+          task.depends_on.every((dep) => !stale.has(dep)),
+      )
+      .map((task) => task.id),
+  );
+}
+
 export class PdpTasksProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private readonly change = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.change.event;
   private current: ProjectStatus | null = null;
+  private running: ReadonlySet<string> = new Set();
 
-  update(status: ProjectStatus | null): void {
+  update(
+    status: ProjectStatus | null,
+    running: ReadonlySet<string> = new Set(),
+  ): void {
     this.current = status;
+    this.running = running;
     this.change.fire();
   }
 
@@ -206,7 +293,9 @@ export class PdpTasksProvider implements vscode.TreeDataProvider<vscode.TreeItem
       return [];
     }
     const root = workspaceRoot();
-    const tasks = this.current.tasks.map((task) => new TaskItem(task));
+    const tasks = this.current.tasks.map(
+      (task) => new TaskItem(task, this.running.has(task.id)),
+    );
     return root ? [new FileItem(path.join(root, "pdp.yml")), ...tasks] : tasks;
   }
 }

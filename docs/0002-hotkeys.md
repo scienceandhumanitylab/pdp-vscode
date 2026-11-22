@@ -166,11 +166,11 @@ Webview:
 | `Enter` | (tree item command)          | opens `task.yml` — unchanged, add nothing |
 | `r`     | `pdp.runTaskConfirm` (new)   | modal → `pdp.runTask`                     |
 | `c`     | `pdp.cleanTaskConfirm` (new) | modal → `pdp.cleanTask`                   |
-| `t`     | `pdp.runToConfirm` (new)     | modal → `pdp.runTo`                       |
+| `t`     | `pdp.openTask`               | open `task.yml` (was run-to; see step 18) |
+| `T`     | `pdp.createTaskYml`          | open `task.yml`, or modal → create stub   |
 | `f`     | `pdp.freshenTask`            | existing modal                            |
 | `d`     | `pdp.deleteTask`             | existing modal                            |
 | `s`     | `pdp.openTaskSrc` (new)      | open the task's `src/` file (see below)   |
-| `o`     | `pdp.revealTaskOutput` (new) | reveal `<task>/output/` in the Explorer   |
 
 Every one: `"when": "focusedView == pdp.tasks && !terminalFocus"` and
 `"args": { "selected": true }`.
@@ -180,11 +180,11 @@ Selection plumbing (`src/extension.ts`):
 - Keep the tree view: `const tasksTree = vscode.window.createTreeView(…)` at
   module level (assigned in `activate`, still pushed to
   `context.subscriptions`).
-- In `taskFromArgOrPick`, before the string branch: if `arg` is an object with
-  `selected === true`, use `tasksTree.selection[0]` when it is a `TaskItem`;
-  otherwise fall through to the QuickPick (e.g. the `pdp.yml` row or a file row
-  is selected). Do not use the selection for any other argument shape, so
-  palette calls keep prompting.
+- In `taskFromArgOrPick`: if `arg` is an object with `selected === true`, act
+  directly on the focused row's task (a `TaskItem`, or the task owning a file
+  row) with no picker; only a row with no task (`pdp.yml`) falls through to the
+  QuickPick. Other argument shapes keep prompting, with the selected row's task
+  leading the picker.
 
 New commands (register in `registerCommands()`, add to `contributes.commands`;
 hide the three `…Confirm` commands from the palette with
@@ -199,9 +199,6 @@ hide the three `…Confirm` commands from the palette with
   - `pdp.cleanTaskConfirm`: verb `Clean`, detail
     `Runs pdp clean <id>, which removes the task's outputs.`, command
     `pdp.cleanTask`.
-  - `pdp.runToConfirm`: verb `Run to`, detail
-    `Runs pdp run --to <id>: the task and everything upstream of it.`, command
-    `pdp.runTo`.
   - Confirmation applies to the keyboard path only; inline buttons and
     context-menu entries keep calling the unconfirmed commands.
 - `pdp.openTaskSrc` ("PDP: Open Task Source File"): `withTask` →
@@ -217,11 +214,6 @@ hide the three `…Confirm` commands from the palette with
     `"when": "view == pdp.tasks && viewItem == task"`, group `3_open@3`) and to
     `TASK_MENU_ACTIONS` (graph right-click QuickPick) after "Open task.yml" as
     `Open source file`.
-- `pdp.revealTaskOutput` ("PDP: Reveal Task Output"): `withTask` →
-  `taskFolder(id)` → `output = path.join(folder, "output")`; if it does not
-  exist, `showInformationMessage("PDP: <id> has no output/ folder yet")`; else
-  `executeCommand("revealInExplorer", vscode.Uri.file(output))` (same as
-  `revealTaskFolder`).
 
 `r` and `s` mean different things in the graph (reset/save) and the tasks tree
 (run/source). Accepted; the contexts never overlap.
@@ -280,8 +272,8 @@ hide the three `…Confirm` commands from the palette with
   `command`, `key`, `when` (and `args` where listed).
 - `taskFromArgOrPick` with `{ selected: true }`: tested through a command, e.g.
   reveal `tasksTree` selection via `tasksTree.reveal(item, { select: true })` on
-  the `import` task, then `pdp.revealTaskOutput` with `{ selected: true }` hits
-  that task (stub `executeCommand` capture or check the info message).
+  the `import` task, then `pdp.runTaskConfirm` with `{ selected: true }` names
+  that task in its modal, with no picker.
 - `pdp.openTaskSrc` on `import`: create files in `fixtures/demo/import/src/`
   inside the test and delete them in `finally`. One file → active editor is that
   file. Two files → QuickPick shown (stub `vscode.window.showQuickPick` to
@@ -444,14 +436,44 @@ bar shows `running…`, no per-task marks); contrast of the dashed and dotted
 borders against both node colours in light, dark and high-contrast themes (3:1
 for UI components).
 
+## H. Step 18: Makefile and source keys, run/clean all
+
+Delivered; see `docs/report/18-fixture-src-and-task-hotkeys.md`.
+
+| Key | Command                  | Behaviour                                            |
+| --- | ------------------------ | ---------------------------------------------------- |
+| `m` | `pdp.openTaskMakefile`   | open `<task>/Makefile`, or explain its absence       |
+| `M` | `pdp.createTaskMakefile` | open the Makefile, or confirm-then-create the stub   |
+| `S` | `pdp.createTaskSrc`      | open the src files, or confirm-then-create `main.sh` |
+| `R` | `pdp.runAllConfirm`      | modal → `pdp.runAll` (`pdp run`)                     |
+| `C` | `pdp.cleanAllConfirm`    | modal → `pdp.cleanAll` (`pdp clean`)                 |
+
+- Task-scoped keys (`m`, `M`, `S`) carry `{ selected: true }` like the others;
+  `R`/`C` act on the project and take no argument.
+- Created files match the fixture convention: a Makefile whose `<id>` target
+  runs `bash src/main.sh`, and a `main.sh` that creates `output/` and touches
+  `done.txt`. The id is `TASK_ID_PATTERN`-validated before it becomes a Makefile
+  target.
+- The fixture project moved the same way: every task's Makefile only delegates,
+  the touch lives in `src/main.sh`, and `model` sleeps 3 s first so a run takes
+  a visible moment.
+
+## I. Step 19: graph toolbar arrows and j/k
+
+Delivered in the "Sidebar shortcuts" commit; the stale test assertion was
+repaired later. Left/Right (and `j`/`k`; `l` is the layout key, so the vim pair
+is j/k, not h/l) move between the graph toolbar buttons the way `Tab` does,
+wrapping, from anywhere in the webview; the open layout menu keeps its own
+ArrowUp/Down + j/k keys.
+
 ## Security checklist (both steps; record in each report)
 
 - Webview messages are untrusted: `focus` coerced with `=== true`,
   `chooseLayout` names validated, unknown message types ignored.
 - Menu and labels rendered with `textContent` / Cytoscape data, never
   `innerHTML`.
-- `openTaskSrc` / `revealTaskOutput` resolve paths only under `taskFolder(id)`,
-  which validates the id; no processes spawned.
+- `openTaskSrc` resolves paths only under `taskFolder(id)`, which validates the
+  id; no processes spawned.
 - pdp progress lines are untrusted: strict parse, ids checked against the latest
   status, nodes addressed by generated `n<i>` ids.
 - `--progress` is a fixed argv word; spawning stays argument-array.
