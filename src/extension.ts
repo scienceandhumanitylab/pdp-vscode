@@ -215,6 +215,7 @@ function registerCommands(): vscode.Disposable[] {
 
     register("pdp.openTask", (arg) => withTask(arg, openTaskYml)),
     register("pdp.revealTask", (arg) => withTask(arg, revealTaskFolder)),
+    register("pdp.saveGraphLayout", () => graphView?.saveDefault()),
     register("pdp.resetGraphLayout", () => graphView?.resetLayout()),
     register("pdp.graphZoomIn", () => graphView?.zoomBy(1.25)),
     register("pdp.graphZoomOut", () => graphView?.zoomBy(1 / 1.25)),

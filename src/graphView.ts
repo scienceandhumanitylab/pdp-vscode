@@ -17,11 +17,18 @@ export interface GraphViewport {
   pan: { x: number; y: number };
 }
 
+// An arrangement the user saved as the one Reset returns to.
+export interface SavedArrangement {
+  positions: TaskPositions;
+  viewport?: GraphViewport;
+}
+
 // Everything remembered about a project's graph arrangement.
 export interface GraphLayout {
   positions: TaskPositions;
   layout?: LayoutName;
   viewport?: GraphViewport;
+  saved?: SavedArrangement;
 }
 
 // The automatic layouts offered in the Graph view; the stored name is
@@ -165,19 +172,37 @@ function validLayout(input: unknown): GraphLayout {
   if (typeof input !== "object" || input === null) {
     return { positions: {} };
   }
-  const { positions, viewport, layout } = input as {
+  const { positions, viewport, layout, saved } = input as {
     positions?: unknown;
     layout?: unknown;
     viewport?: { zoom?: unknown; pan?: unknown };
+    saved?: unknown;
   };
   const name = validLayoutName(layout);
-  const valid: GraphLayout = { positions: validPositions(positions) };
+  const valid: GraphLayout = validArrangement({ positions, viewport });
   if (name) {
     valid.layout = name;
   }
-  const parsedViewport = viewport
-    ? validViewport(viewport.zoom, viewport.pan)
-    : undefined;
+  const savedArrangement = validArrangement(saved);
+  if (Object.keys(savedArrangement.positions).length > 0) {
+    valid.saved = savedArrangement;
+  }
+  return valid;
+}
+
+function validArrangement(input: unknown): SavedArrangement {
+  if (typeof input !== "object" || input === null) {
+    return { positions: {} };
+  }
+  const { positions, viewport } = input as {
+    positions?: unknown;
+    viewport?: { zoom?: unknown; pan?: unknown };
+  };
+  const valid: SavedArrangement = { positions: validPositions(positions) };
+  const parsedViewport =
+    typeof viewport === "object" && viewport !== null
+      ? validViewport(viewport.zoom, viewport.pan)
+      : undefined;
   if (parsedViewport) {
     valid.viewport = parsedViewport;
   }
@@ -232,6 +257,9 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
   const FONT = "Segoe UI, system-ui, sans-serif";
   const PAD_X = 10;
   const PAD_Y = 6;
+  // Space between boxes: along a tier, and between tiers.
+  const GAP_ACROSS = 12;
+  const GAP_DOWN = 40;
   const measure = document.createElement("canvas").getContext("2d");
 
   window.addEventListener("message", (event) => {
@@ -240,6 +268,13 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
       clearTimeout(saveTimer);
       if (cy) { cy.destroy(); cy = null; }
       container.textContent = data.message;
+      return;
+    }
+    if (data.type === "saveDefault") {
+      if (cy) {
+        clearTimeout(saveTimer);
+        postLayout(true);
+      }
       return;
     }
     if (data.type !== "render" && data.type !== "zoom") {
@@ -278,7 +313,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
 
   // The whole arrangement — positions and viewport — goes to the host on
   // drag end, and debounced after the user zooms or pans.
-  function postLayout() {
+  function postLayout(asDefault) {
     const positions = {};
     cy.nodes().forEach((node) => {
       const id = ids[nodeIndex(node)];
@@ -291,6 +326,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
       positions: positions,
       zoom: cy.zoom(),
       pan: cy.pan(),
+      asDefault: asDefault === true,
     });
   }
 
@@ -310,6 +346,18 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     });
   }
 
+  // Box-derived spacing: "across" steps between siblings in a tier, "down"
+  // between tiers; left-right turns tiers into columns.
+  function spacing(layoutName) {
+    const dims = cy.nodes().map((node) => node.layoutDimensions({}));
+    const widest = Math.max(...dims.map((d) => d.w));
+    const tallest = Math.max(...dims.map((d) => d.h));
+    const unit = Math.max(widest, tallest);
+    return layoutName === "left-right"
+      ? { unit, across: tallest + GAP_ACROSS, down: widest + GAP_DOWN }
+      : { unit, across: widest + GAP_ACROSS, down: tallest + GAP_DOWN };
+  }
+
   // The automatic layouts; breadthfirst is top-to-bottom, so left-right
   // swaps the coordinates it produces.
   function layoutOptions(name, elements) {
@@ -321,19 +369,81 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     const incoming = new Set(
       elements.filter((e) => e.group === "edges").map((e) => e.data.target),
     );
-    const options = {
+    // A collapsed boundingBox leaves avoidOverlap's minimum (unit, the
+    // largest box side) as every step; transform rescales each axis to the
+    // boxes so the graph packs tight instead of stretching to the sidebar.
+    const { unit, across, down } = spacing(name);
+    return {
       name: "breadthfirst",
       directed: true,
-      padding: 30,
-      spacingFactor: 1.15,
+      maximal: true,
+      avoidOverlap: true,
+      spacingFactor: 1,
+      boundingBox: { x1: 0, y1: 0, w: 1, h: 1 },
       roots: elements
         .filter((e) => e.group === "nodes" && !incoming.has(e.data.id))
         .map((e) => e.data.id),
+      transform: (node, pos) => {
+        const x = (pos.x * across) / unit;
+        const y = (pos.y * down) / unit;
+        return name === "left-right" ? { x: y, y: x } : { x, y };
+      },
     };
-    if (name === "left-right") {
-      options.transform = (node, pos) => ({ x: pos.y, y: pos.x });
+  }
+
+  // Tasks added since the arrangement was saved: each goes one tier past
+  // its placed upstream tasks (else one before its downstream ones),
+  // centred on them, else beside the graph's last tier; then it steps along
+  // the tier until it overlaps nothing.
+  function placeNew(missing, layoutName) {
+    const leftRight = layoutName === "left-right";
+    const depthOf = (p) => (leftRight ? p.x : p.y);
+    const crossOf = (p) => (leftRight ? p.y : p.x);
+    const at = (depth, cross) =>
+      leftRight ? { x: depth, y: cross } : { x: cross, y: depth };
+    const mean = (values) => values.reduce((a, b) => a + b, 0) / values.length;
+    const { across, down } = spacing(layoutName);
+    let placed = cy.nodes().filter((node) => !missing.has(node.id()));
+    let pending = cy.nodes().filter((node) => missing.has(node.id()));
+    while (pending.nonempty()) {
+      // Nodes touching the placed graph first, so a chain of new tasks grows
+      // out from it instead of starting beside it.
+      const node =
+        pending.filter((n) =>
+          n.neighborhood("node").intersection(placed).nonempty(),
+        )[0] ?? pending[0];
+      const ups = node.incomers("node").intersection(placed);
+      const downs = node.outgoers("node").intersection(placed);
+      let depth;
+      let cross;
+      if (ups.nonempty()) {
+        depth = Math.max(...ups.map((n) => depthOf(n.position()))) + down;
+        cross = mean(ups.map((n) => crossOf(n.position())));
+      } else if (downs.nonempty()) {
+        depth = Math.min(...downs.map((n) => depthOf(n.position()))) - down;
+        cross = mean(downs.map((n) => crossOf(n.position())));
+      } else {
+        const all = placed.map((n) => n.position());
+        depth = Math.max(...all.map(depthOf));
+        cross = Math.max(...all.map(crossOf)) + across;
+      }
+      const overlaps = (p) =>
+        placed.some((other) => {
+          const o = other.position();
+          return (
+            Math.abs(o.x - p.x) <
+              (other.outerWidth() + node.outerWidth()) / 2 + GAP_ACROSS &&
+            Math.abs(o.y - p.y) <
+              (other.outerHeight() + node.outerHeight()) / 2 + GAP_ACROSS
+          );
+        });
+      while (overlaps(at(depth, cross))) {
+        cross += across;
+      }
+      node.position(at(depth, cross));
+      placed = placed.union(node);
+      pending = pending.difference(node);
     }
-    return options;
   }
 
   // Plain nodes have no padding, and cytoscape's width/height "label" is
@@ -423,16 +533,36 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     });
     if (preset) {
       cy.resize();
+      const missing = new Set(
+        elements
+          .filter((e) => e.group === "nodes" && !e.position)
+          .map((e) => e.data.id),
+      );
+      placeNew(missing, layoutName);
       // destroy() resets pan/zoom; restore the saved viewport so refreshes
       // keep the user's view, fitting only when none is saved yet.
       restoring = true;
       if (viewport && Number.isFinite(viewport.zoom) && viewport.pan) {
         cy.zoom(viewport.zoom);
         cy.pan(viewport.pan);
+        // A newly placed task may sit outside the saved view; widen to it.
+        const added = cy.nodes().filter((node) => missing.has(node.id()));
+        const view = cy.extent();
+        const box = added.boundingBox();
+        if (
+          added.nonempty() &&
+          (box.x1 < view.x1 || box.x2 > view.x2 ||
+            box.y1 < view.y1 || box.y2 > view.y2)
+        ) {
+          cy.fit(undefined, 30);
+        }
       } else {
         cy.fit(undefined, 30);
       }
       restoring = false;
+      if (missing.size > 0) {
+        postLayout();
+      }
       lastPreset = true;
       ack();
       return;
@@ -459,6 +589,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
 export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | null = null;
   private status: ProjectStatus | null = null;
+  private defaultRequested = false;
   private readonly onOpenTask: (id: string) => void;
   private readonly onTaskMenu: (id: string) => void;
   private readonly themeListener: vscode.Disposable;
@@ -525,7 +656,15 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
         };
       }
       if (message.type === "positions") {
-        this.saveLayout(message.positions, message.zoom, message.pan);
+        this.saveLayout(
+          message.positions,
+          message.zoom,
+          message.pan,
+          message.asDefault === true && this.defaultRequested,
+        );
+        if (message.asDefault === true) {
+          this.defaultRequested = false;
+        }
       }
       if (message.type === "openTask" || message.type === "taskMenu") {
         const task = this.taskAt(message.node);
@@ -574,7 +713,12 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
 
   // The webview echoes ids we sent, but it stays untrusted input: accept
   // only ids in the current status, finite coordinates and a sane viewport.
-  private saveLayout(positions: unknown, zoom: unknown, pan: unknown): void {
+  private saveLayout(
+    positions: unknown,
+    zoom: unknown,
+    pan: unknown,
+    asDefault: boolean,
+  ): void {
     const root = workspaceRoot();
     if (!root || !this.status) {
       return;
@@ -589,35 +733,61 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
     }
     const viewport = validViewport(zoom, pan);
     if (Object.keys(accepted).length > 0) {
-      const layout: GraphLayout = { positions: accepted };
-      // Arrangement saves must not clobber the chosen layout name.
+      const arrangement: SavedArrangement = { positions: accepted };
+      if (viewport) {
+        arrangement.viewport = viewport;
+      }
+      // Arrangement saves must not clobber the chosen layout name or default.
       const current = validLayout(
         this.storage.get<GraphLayout>(positionsKey(root)),
       );
+      const layout: GraphLayout = { ...arrangement };
       if (current.layout) {
         layout.layout = current.layout;
       }
-      if (viewport) {
-        layout.viewport = viewport;
+      const saved = asDefault ? arrangement : current.saved;
+      if (saved) {
+        layout.saved = saved;
       }
       void this.storage.update(positionsKey(root), layout);
+      if (asDefault) {
+        vscode.window.setStatusBarMessage(
+          "PDP: Graph layout saved as default",
+          3000,
+        );
+      }
     }
   }
 
-  // The user's only way back to the automatic layout: clear everything
-  // remembered about their arrangement (keeping the chosen layout name)
-  // and re-render. Runs and refreshes never touch it.
+  // The webview answers with a positions message flagged asDefault, so
+  // even an untouched automatic layout or a pending zoom is captured.
+  saveDefault(): void {
+    if (!this.view || !this.status?.tasks.length) {
+      void vscode.window.showInformationMessage(
+        "PDP: Open the Graph view with tasks shown to save its layout.",
+      );
+      return;
+    }
+    this.defaultRequested = true;
+    void this.view.webview.postMessage({ type: "saveDefault" });
+  }
+
+  // The user's way back: to their saved default if there is one, otherwise
+  // to the automatic layout (keeping the chosen layout name). Runs and
+  // refreshes never touch it.
   async resetLayout(): Promise<void> {
     const root = workspaceRoot();
     if (root) {
       const current = validLayout(
         this.storage.get<GraphLayout>(positionsKey(root)),
       );
-      const cleared: GraphLayout = { positions: {} };
+      const reset: GraphLayout = current.saved
+        ? { ...current.saved, saved: current.saved }
+        : { positions: {} };
       if (current.layout) {
-        cleared.layout = current.layout;
+        reset.layout = current.layout;
       }
-      await this.storage.update(positionsKey(root), cleared);
+      await this.storage.update(positionsKey(root), reset);
     }
     this.pushStatus();
   }
@@ -628,8 +798,8 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: "zoom", factor });
   }
 
-  // Switching the automatic layout means new geometry: the old positions
-  // and viewport described the previous layout, so both are cleared.
+  // Switching the automatic layout means new geometry: the old positions,
+  // viewport and saved default described the previous layout, so all go.
   async chooseLayout(name: string): Promise<void> {
     const root = workspaceRoot();
     const layoutName = validLayoutName(name);
@@ -667,13 +837,12 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
       elements: graphElements(this.status, layout.positions),
       ids: this.status.tasks.map((task) => task.id),
       labels: nodeLabels(this.status),
-      // preset restores saved positions and the saved viewport; the stored
-      // layout name runs otherwise (first render, added task, reset).
-      preset:
-        this.status.tasks.length > 0 &&
-        this.status.tasks.every(
-          (task) => layout.positions[task.id] !== undefined,
-        ),
+      // preset restores saved positions and the saved viewport, and the
+      // webview places any task added since next to its neighbours; the
+      // stored layout name runs only when nothing is saved.
+      preset: this.status.tasks.some(
+        (task) => layout.positions[task.id] !== undefined,
+      ),
       viewport: layout.viewport,
       layout: layout.layout ?? "top-down",
       dark,

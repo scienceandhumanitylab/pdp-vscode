@@ -226,7 +226,8 @@ suite("graph", () => {
       viewport?: unknown;
       elements: { data: { id: string }; position?: unknown }[];
     };
-    assert.strictEqual(seeded.preset, false, "junk position was dropped");
+    // The valid saved positions still count; only the dropped one is placed.
+    assert.strictEqual(seeded.preset, true, "saved positions were discarded");
     assert.strictEqual(seeded.viewport, undefined, "no viewport saved");
     assert.strictEqual(
       seeded.elements.find((element) => element.data.id === "n0")?.position,
@@ -338,8 +339,116 @@ suite("graph", () => {
     provider.dispose();
   });
 
+  test("a saved default survives drags, reset restores it, and choosing a layout drops it", async () => {
+    const posted: Record<string, unknown>[] = [];
+    const listeners: Array<(message: unknown) => void> = [];
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: (listener: (message: unknown) => void) => {
+          listeners.push(listener);
+          return { dispose: () => undefined };
+        },
+        postMessage: (message: Record<string, unknown>) => {
+          posted.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      onDidDispose: () => ({ dispose: () => undefined }),
+    } as unknown as vscode.WebviewView;
+    const storage = stubMemento();
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      storage,
+      () => undefined,
+      () => undefined,
+    );
+    const key = positionsKey(workspaceRoot() ?? "");
+    const send = (message: unknown) =>
+      listeners.forEach((listener) => listener(message));
+
+    provider.resolveWebviewView(view);
+    provider.update(status);
+    provider.saveDefault();
+    assert.deepStrictEqual(posted.at(-1), { type: "saveDefault" });
+
+    // The webview answers with its arrangement; still untrusted input.
+    send({
+      type: "positions",
+      asDefault: true,
+      positions: {
+        fetch: { x: 1, y: 1 },
+        clean: { x: 2, y: 2 },
+        report: { x: 3, y: 3 },
+        ghost: { x: 9, y: 9 },
+      },
+      zoom: 1.2,
+      pan: { x: 5, y: 6 },
+    });
+    const saved = {
+      positions: {
+        fetch: { x: 1, y: 1 },
+        clean: { x: 2, y: 2 },
+        report: { x: 3, y: 3 },
+      },
+      viewport: { zoom: 1.2, pan: { x: 5, y: 6 } },
+    };
+    assert.deepStrictEqual(storage.saved[key], { ...saved, saved });
+
+    // A later drag moves the current arrangement, not the default; an
+    // asDefault flag the host never asked for is ignored.
+    send({
+      type: "positions",
+      asDefault: true,
+      positions: {
+        fetch: { x: 7, y: 7 },
+        clean: { x: 8, y: 8 },
+        report: { x: 9, y: 9 },
+      },
+      zoom: 1,
+      pan: { x: 0, y: 0 },
+    });
+    assert.deepStrictEqual(
+      (storage.saved[key] as { saved?: unknown }).saved,
+      saved,
+    );
+
+    await provider.resetLayout();
+    assert.deepStrictEqual(storage.saved[key], { ...saved, saved });
+    const restored = posted
+      .filter((message) => message.type === "render")
+      .at(-1) as {
+      preset: boolean;
+      viewport?: unknown;
+      elements: { data: { id: string }; position?: unknown }[];
+    };
+    assert.strictEqual(restored.preset, true);
+    assert.deepStrictEqual(restored.viewport, saved.viewport);
+    assert.deepStrictEqual(
+      restored.elements.find((element) => element.data.id === "n2")?.position,
+      { x: 3, y: 3 },
+    );
+
+    // Junk in a persisted default never reaches the canvas.
+    storage.saved[key] = {
+      positions: {},
+      saved: { positions: { fetch: { x: "no", y: 1 } }, viewport: "big" },
+    };
+    await provider.resetLayout();
+    assert.deepStrictEqual(storage.saved[key], { positions: {} });
+
+    await provider.chooseLayout("left-right");
+    assert.deepStrictEqual(storage.saved[key], {
+      positions: {},
+      layout: "left-right",
+    });
+    provider.dispose();
+  });
+
   test("graph view renders with cytoscape and keeps the arrangement across refreshes", async () => {
-    const ext = vscode.extensions.getExtension("scienceandhumanitylab.pdp");
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
     assert.ok(ext, "extension not found");
     await ext.activate();
     await vscode.commands.executeCommand("pdp.graph.focus");
@@ -364,7 +473,86 @@ suite("graph", () => {
       "refresh moved the nodes",
     );
   }).timeout(20000);
+
+  test("top-down packs siblings and tiers close, and a new task joins without moving the rest", async () => {
+    assert.ok(graphView, "graph view not registered");
+    // Start from nothing saved, whatever earlier tests left behind.
+    const before = graphView.lastAck;
+    await graphView.chooseLayout("top-down");
+    const cleared = await acked(graphView, before);
+    const fan = statusOf([
+      ["hub", []],
+      ["leaf1", ["hub"]],
+      ["leaf2", ["hub"]],
+      ["leaf3", ["hub"]],
+    ]);
+    graphView.update(fan);
+    const first = await acked(graphView, cleared);
+    assert.strictEqual(first.preset, false, "expected a fresh layout");
+    const at = (ack: typeof first, id: string) =>
+      ack.positions[id] as { x: number; y: number };
+    const leaves = ["n1", "n2", "n3"].map((id) => at(first, id));
+    assert.ok(
+      leaves.every((leaf) => leaf.y === leaves[0].y),
+      "siblings share a tier",
+    );
+    const xs = leaves.map((leaf) => leaf.x).sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i++) {
+      const gap = xs[i] - xs[i - 1];
+      assert.ok(gap > 40 && gap < 100, `sibling spacing ${gap}`);
+    }
+    const tier = leaves[0].y - at(first, "n0").y;
+    assert.ok(tier > 30 && tier < 100, `tier spacing ${tier}`);
+
+    // Let the debounced auto-adopt persist the arrangement.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    graphView.update(
+      statusOf([
+        ["hub", []],
+        ["leaf1", ["hub"]],
+        ["leaf2", ["hub"]],
+        ["leaf3", ["hub"]],
+        ["tail", ["leaf1"]],
+      ]),
+    );
+    const grown = await acked(graphView, first);
+    assert.strictEqual(grown.preset, true, "the saved positions were dropped");
+    for (const id of ["n0", "n1", "n2", "n3"]) {
+      assert.deepStrictEqual(at(grown, id), at(first, id), `${id} moved`);
+    }
+    assert.strictEqual(at(grown, "n4").x, at(first, "n1").x);
+    assert.ok(at(grown, "n4").y > at(first, "n1").y, "tail sits below leaf1");
+
+    // The placement was persisted: the next refresh keeps it.
+    graphView.update(
+      statusOf([
+        ["hub", []],
+        ["leaf1", ["hub"]],
+        ["leaf2", ["hub"]],
+        ["leaf3", ["hub"]],
+        ["tail", ["leaf1"]],
+      ]),
+    );
+    const again = await acked(graphView, grown);
+    assert.deepStrictEqual(again.positions, grown.positions);
+  }).timeout(20000);
 });
+
+function statusOf(tasks: [string, string[]][]) {
+  return parseStatus(
+    JSON.stringify({
+      project: "demo",
+      tasks: tasks.map(([id, depends_on]) => ({
+        id,
+        stale: false,
+        depends_on,
+        description: "",
+        entrypoint: "make",
+        slurm: {},
+      })),
+    }),
+  );
+}
 
 // Poll the provider's render ack: a new object per render the webview did.
 async function acked(

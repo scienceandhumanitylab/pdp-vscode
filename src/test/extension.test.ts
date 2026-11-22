@@ -7,7 +7,9 @@ suite("Extension Test Suite", () => {
   vscode.window.showInformationMessage("Start all tests.");
 
   test("activates and registers every contributed command", async () => {
-    const ext = vscode.extensions.getExtension("scienceandhumanitylab.pdp");
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
     assert.ok(ext, "extension not found");
     await ext.activate();
     const pkg = JSON.parse(

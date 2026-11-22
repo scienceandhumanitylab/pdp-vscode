@@ -64,3 +64,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   picker on the title bar switches between top-down, left-right and
   force-directed, and **Reset Graph Layout** clears your arrangement back to
   the chosen layout.
+- The graph packs its boxes closer, so it fills the sidebar narrow and tall.
+  **Save Graph Layout as Default** (title bar, palette) remembers your
+  arrangement, and **Reset Graph Layout** returns to it; choosing a layout
+  drops it. A newly added task is placed next to its neighbours instead of
+  re-laying out the whole graph.

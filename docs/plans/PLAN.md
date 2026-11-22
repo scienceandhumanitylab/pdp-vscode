@@ -401,6 +401,20 @@ stale:` lines (`parseFreshen`) and offers a **Freshen Downstream** button
   stay. Showing `dependency_entries` is moot with the rows gone.
 - Report `docs/report/14-freshen-scaffold-leaner-task-rows.md`.
 
+### 15. Graph: compact layout, saved default, new tasks join in place
+
+`src/graphView.ts`, `src/extension.ts`, `package.json`, `src/test/*`.
+
+- Top-down and left-right pack boxes by their measured size (gap constants
+  next to `PAD_X`/`PAD_Y`) instead of stretching to the sidebar: narrow and
+  tall in the sidebar.
+- **PDP: Save Graph Layout as Default** (title bar, palette) stores the
+  current arrangement in `workspaceState`; Reset returns to it. Choosing a
+  layout drops it (the way back to an automatic layout).
+- A task added after the arrangement was saved is placed next to its
+  neighbours; the rest of the graph does not move.
+- Report `docs/report/15-graph-compact-layout-and-saved-default.md`.
+
 ## Development
 
 ### The pdp tool

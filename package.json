@@ -114,6 +114,11 @@
         "icon": "$(discard)"
       },
       {
+        "command": "pdp.saveGraphLayout",
+        "title": "PDP: Save Graph Layout as Default",
+        "icon": "$(save)"
+      },
+      {
         "command": "pdp.graphZoomIn",
         "title": "PDP: Graph Zoom In",
         "icon": "$(zoom-in)"
@@ -309,9 +314,14 @@
           "group": "navigation@3"
         },
         {
-          "command": "pdp.resetGraphLayout",
+          "command": "pdp.saveGraphLayout",
           "when": "view == pdp.graph",
           "group": "navigation@4"
+        },
+        {
+          "command": "pdp.resetGraphLayout",
+          "when": "view == pdp.graph",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [
