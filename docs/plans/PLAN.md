@@ -34,9 +34,9 @@ media/
 - `remoteStatus()`: `pdp remote status --json`.
 - `run(args)`: spawn, pipe stdout/stderr to the Output channel, resolve with
   exit code and the parsed report. The report is the trailing lines
-  `_print_report` prints (`Ran:`, `Fresh:`, `Failed:`, `No entrypoint
-(failed):`, `Skipped (upstream failed):`, `Ran but wrote nothing to
-output/:`).
+  `_print_report` prints (`Ran:`, `Fresh:`, `Failed:`,
+  `No entrypoint (failed):`, `Skipped (upstream failed):`,
+  `Ran but wrote nothing to output/:`).
 - Cancel: send SIGINT (pdp and Dagster shut down cleanly on it).
 - Env: set `COLUMNS=200` so rich does not wrap lines we parse.
 - Version check on activate: `pdp --version` must be ≥ the current release;
@@ -74,42 +74,40 @@ Every command is in the palette (`PDP: ...`) and on a button where it fits.
 
 Own activity bar container `pdp`, shown when `workspaceContains:pdp.yml`.
 
-- **Tasks view**: topological order. Each task shows a "stale" or "fresh"
-  label plus a distinct icon per state (theme colours, not colour alone);
-  the task description follows the label. Children: `depends on`,
-  `entrypoint`, `slurm` flags. Click opens `task.yml`.
+- **Tasks view**: topological order. Each task shows a "stale" or "fresh" label
+  plus a distinct icon per state (theme colours, not colour alone); the task
+  description follows the label. Children: `depends on`, `entrypoint`, `slurm`
+  flags. Click opens `task.yml`.
 - **Graph view**: the task DAG as a Mermaid flowchart; see "Graph" below.
 - **Remote view**: rows from `remote status --json` (host, project pushed,
-  session, last run, Dagster port, Slurm jobs). Manual refresh only (SSH).
-  Also lists background processes the extension owns (local Dagster,
-  remote tunnel) with Open UI / Stop buttons.
+  session, last run, Dagster port, Slurm jobs). Manual refresh only (SSH). Also
+  lists background processes the extension owns (local Dagster, remote tunnel)
+  with Open UI / Stop buttons.
 - **Welcome view** when no `pdp.yml`: "Init project" button.
 - **Status bar**: `PDP: N stale`; click runs all.
 
 ### Refresh
 
-`FileSystemWatcher` on `**/{input,src,output,hand}/**` and `**/*.yml`,
-debounced 500 ms, plus after every finished command. One status call in
-flight at a time.
+`FileSystemWatcher` on `**/{input,src,output,hand}/**` and `**/*.yml`, debounced
+500 ms, plus after every finished command. One status call in flight at a time.
 
 ### Long-running processes
 
 `pdp dagster dev` and `pdp remote start` are spawned and tracked in a map.
-Detect readiness by watching output for the UI URL, then offer Open UI
-(Simple Browser or external). Stop = SIGINT. All children are killed in
-`deactivate()`. Note: stopping the remote tunnel leaves the cluster session
-running (by design in pdp); `Remote stop` ends it.
+Detect readiness by watching output for the UI URL, then offer Open UI (Simple
+Browser or external). Stop = SIGINT. All children are killed in `deactivate()`.
+Note: stopping the remote tunnel leaves the cluster session running (by design
+in pdp); `Remote stop` ends it.
 
 ### Graph
 
 Sidebar webview view (`pdp.graph`, below Tasks). Mermaid `flowchart TD` built
-from `depends_on`; node class `stale`/`fresh`, and each node's text includes
-a "stale" or "fresh" label. Click a node → `postMessage` → open its
-`task.yml`. Re-render on every refresh while visible; the provider stores the
-latest status while the view is hidden. CSP: only `webview.cspSource` scripts
-plus a nonce. `media/mermaid.min.js` is copied from
-`node_modules/mermaid/dist/` by the `compile` script and must not be listed
-in `.vscodeignore`.
+from `depends_on`; node class `stale`/`fresh`, and each node's text includes a
+"stale" or "fresh" label. Click a node → `postMessage` → open its `task.yml`.
+Re-render on every refresh while visible; the provider stores the latest status
+while the view is hidden. CSP: only `webview.cspSource` scripts plus a nonce.
+`media/mermaid.min.js` is copied from `node_modules/mermaid/dist/` by the
+`compile` script and must not be listed in `.vscodeignore`.
 
 ## Steps
 
@@ -137,8 +135,8 @@ In `pdp/pdp/cli.py`, add a `--json` option to `status`:
 - Print with `json.dumps` and plain `print`, not rich (no markup, no wrap).
 - `slurm` is `dict(task.task_config.slurm or {})`.
 - Errors keep the existing behavior: message on stderr, exit 1.
-- Test in `tests/test_cli.py` next to the existing status tests: parses as
-  JSON, order, stale flag, depends_on.
+- Test in `tests/test_cli.py` next to the existing status tests: parses as JSON,
+  order, stale flag, depends_on.
 - README "Additional commands": one line on `--json`.
 
 ### 2. pdp library: `pdp remote status --json`
@@ -168,9 +166,9 @@ Same fields the text output shows:
 }
 ```
 
-`jobs` is `null` if `squeue` failed. Unreachable host keeps the current
-error + exit 1. Test with the existing remote mocks in `tests/test_remote.py`
-/ `tests/test_cli.py`.
+`jobs` is `null` if `squeue` failed. Unreachable host keeps the current error +
+exit 1. Test with the existing remote mocks in `tests/test_remote.py` /
+`tests/test_cli.py`.
 
 ### 3. pdp release
 
@@ -198,9 +196,9 @@ scaffold, open task.yml.
 
 ### 8. Tests and packaging
 
-- `@vscode/test-cli` tests against a fixture project in
-  `src/test/fixtures/demo` (pdp.yml + 3 tasks with trivial Makefiles):
-  status parsing, report parsing, tree items.
+- `@vscode/test-cli` tests against a fixture project in `src/test/fixtures/demo`
+  (pdp.yml + 3 tasks with trivial Makefiles): status parsing, report parsing,
+  tree items.
 - `pnpm vsce package` and install the `.vsix` locally to check `media/` ships.
 
 ### 9. Graph view in the sidebar, Run To Here
@@ -209,11 +207,11 @@ Done; see `docs/report/09-graph-view-and-run-to.md`.
 
 - The graph moved from an editor-side `WebviewPanel` to the sidebar
   `WebviewView` `pdp.graph` (`src/graph.ts` → `src/graphView.ts`), always
-  present in the PDP container; `flowchart LR` → `TD` to fit the narrow
-  sidebar. The "Show graph" command and Tasks-title button were removed.
-- New `pdp.runTo` ("Run To Here") on task right-click: `pdp run --to <id>`
-  runs the task and everything upstream, unlike `--only`, which refuses when
-  upstream is stale.
+  present in the PDP container; `flowchart LR` → `TD` to fit the narrow sidebar.
+  The "Show graph" command and Tasks-title button were removed.
+- New `pdp.runTo` ("Run To Here") on task right-click: `pdp run --to <id>` runs
+  the task and everything upstream, unlike `--only`, which refuses when upstream
+  is stale.
 - `pdp.cleanTask` also became a labelled task context-menu entry.
 
 ### 10. Graph: sidebar fit and right-click actions
@@ -221,17 +219,17 @@ Done; see `docs/report/09-graph-view-and-run-to.md`.
 `src/graphView.ts` + `src/extension.ts`.
 
 - Node labels shrink to `id ⚠` (stale) / `id ✓` (fresh); after render the
-  webview appends an SVG `<title>` per node from a `labels` array sent with
-  the render message, so the full state stays on hover. The icon keeps the
-  ADR 0004 text/shape-marker rule.
+  webview appends an SVG `<title>` per node from a `labels` array sent with the
+  render message, so the full state stays on hover. The icon keeps the ADR 0004
+  text/shape-marker rule.
 - One `mermaid.initialize` (the redundant first call goes) with
   `themeVariables.fontSize: 11px` and
   `flowchart: { nodeSpacing: 30, rankSpacing: 35, padding: 8, useMaxWidth: true }`.
 - Right-click a node: a `contextmenu` listener posts `taskMenu` (node index);
   the provider maps it to a task via a new `onTaskMenu(id)` callback;
   `extension.ts` shows a QuickPick — Run / Run only / Run to here / Run from
-  here / Force run / Run on Slurm / Clean / Open task.yml — and dispatches
-  the existing commands with the task id.
+  here / Force run / Run on Slurm / Clean / Open task.yml — and dispatches the
+  existing commands with the task id.
 - `taskFromArgOrPick` accepts a plain task-id string (validated against
   `lastStatus`) so dispatched commands do not re-prompt.
 - Tests: label assertions in `src/test/graph.test.ts` updated; a stub-webview
@@ -241,78 +239,74 @@ Done; see `docs/report/09-graph-view-and-run-to.md`.
 
 ### 11. Tasks view file tree, delete task, and keybindings
 
-`pdp/pdp/cli.py` + `pdp/pdp.py` + `pdp/pdp/task.py`, `src/extension.ts`, `src/tasksView.ts` + `package.json`.
+`pdp/pdp/cli.py` + `pdp/pdp.py` + `pdp/pdp/task.py`, `src/extension.ts`,
+`src/tasksView.ts` + `package.json`.
 
 - New `FileItem` (fs path, `folder`/`file` theme icons, files open with the
   built-in `vscode.open`). `getChildren`:
   - root: a `pdp.yml` row (opens it) before the tasks;
-  - task: existing detail rows (`depends on`, `entrypoint`, `slurm`) first,
-    then the real folder listing (dirs first, alphabetical);
+  - task: existing detail rows (`depends on`, `entrypoint`, `slurm`) first, then
+    the real folder listing (dirs first, alphabetical);
   - dir items recurse.
 - Folder lookup validates task ids the way `taskFolder()` does, silently
   skipping bad ids (no circular import into `extension.ts`).
 - Delete task from the task context menu ("PDP: Delete Task…", group
   `5_delete@1` after Clean):
   - pdp library first: a `pdp delete <id>` command that removes the task's
-    directory **and** its entry from `pdp.yml` (pdp owns the file; the
-    extension must not edit it, and carries no YAML parser). An
-    already-missing directory is not an error — the entry is still removed.
-    It refuses with the list of dependents if another task depends on it,
-    and exits 1 on unknown ids. No `MIN_PDP_VERSION` bump: older pdp
-    answers "no such command" and the extension shows the error.
+    directory **and** its entry from `pdp.yml` (pdp owns the file; the extension
+    must not edit it, and carries no YAML parser). An already-missing directory
+    is not an error — the entry is still removed. It refuses with the list of
+    dependents if another task depends on it, and exits 1 on unknown ids. No
+    `MIN_PDP_VERSION` bump: older pdp answers "no such command" and the
+    extension shows the error.
   - pdp also stops resurrecting deleted tasks: `PDP.initialize()` currently
-    calls `create_task()` for every `pdp.yml` entry, which scaffolds the
-    folder and writes a default `task.yml` — so a manually deleted task
-    dir **and its config** are rebuilt on the next `pdp status`, before the
-    extension ever sees the orphan. Load must only construct `Task`
-    objects; scaffolding stays in `create_task` (`pdp create`) and
-    `pdp scaffold`. A listed task with no folder then stays missing —
-    `status` still lists it (empty config, stale). Update any pdp tests
-    that relied on load-time scaffolding.
-  - pdp stops crashing `status` on dangling `depends_on` ids: renaming a
-    task in `pdp.yml`, or deleting one that others depend on, leaves a
-    `depends_on` entry pointing at an unlisted id. `TopologicalSorter`
-    then emits that id as its own node and `status` dies with `KeyError`
-    at the `flattened[tid]` lookup (traceback, exit 1), and even past
-    that `Task.is_stale` raises `UninitializedProjectError` reading the
-    missing dependency's config. `status` skips unlisted ids when
-    ordering and `is_stale` treats a dependency with no `task.yml` as
-    stale without reading its config; a dependency cycle exits 1 with
-    the `validate`-style message instead of a `CycleError` traceback.
-    `pdp validate` stays the place that reports unknown deps — `status`
-    is a view, not a gate.
+    calls `create_task()` for every `pdp.yml` entry, which scaffolds the folder
+    and writes a default `task.yml` — so a manually deleted task dir **and its
+    config** are rebuilt on the next `pdp status`, before the extension ever
+    sees the orphan. Load must only construct `Task` objects; scaffolding stays
+    in `create_task` (`pdp create`) and `pdp scaffold`. A listed task with no
+    folder then stays missing — `status` still lists it (empty config, stale).
+    Update any pdp tests that relied on load-time scaffolding.
+  - pdp stops crashing `status` on dangling `depends_on` ids: renaming a task in
+    `pdp.yml`, or deleting one that others depend on, leaves a `depends_on`
+    entry pointing at an unlisted id. `TopologicalSorter` then emits that id as
+    its own node and `status` dies with `KeyError` at the `flattened[tid]`
+    lookup (traceback, exit 1), and even past that `Task.is_stale` raises
+    `UninitializedProjectError` reading the missing dependency's config.
+    `status` skips unlisted ids when ordering and `is_stale` treats a dependency
+    with no `task.yml` as stale without reading its config; a dependency cycle
+    exits 1 with the `validate`-style message instead of a `CycleError`
+    traceback. `pdp validate` stays the place that reports unknown deps —
+    `status` is a view, not a gate.
   - Extension: `pdp.deleteTask` via `withTask`, then a native modal
-    `showWarningMessage(..., { modal: true }, "Delete")` naming the task and
-    its resolved folder; confirm → `execSimple(["delete", id], ...)` which
-    refreshes and notifies. Cancel is a no-op.
+    `showWarningMessage(..., { modal: true }, "Delete")` naming the task and its
+    resolved folder; confirm → `execSimple(["delete", id], ...)` which refreshes
+    and notifies. Cancel is a no-op.
   - Cleanup modal for manual deletions: after each refresh, tasks listed in
     status whose folder is missing (host-side `existsSync` — no JSON schema
     change) get one modal — "listed in pdp.yml but folder is missing: X, Y.
     Remove them?" Confirm deletes each via `pdp delete`; dismissed ids are
     remembered for the session so watcher refreshes do not re-prompt.
-  - A failed status stops blanking the views: `doRefresh`'s catch keeps
-    the last good status in the Tasks tree and graph (no `update(null)`)
-    and shows the error notification when the message changes — today
-    the watcher's `refresh()` passes `notifyOnError = false`, so a broken
-    project silently empties the sidebar with no visible error and looks
-    unrecoverable. The `$(error) PDP` status bar item stays as the
-    persistent signal.
-  - Tests: `pdp delete` and load-without-scaffold in pdp's
-    `tests/test_cli.py` (dir and yml entry gone, missing dir tolerated,
-    dependents refusal, unknown id, deleted dir stays deleted after
-    `status`, status with a dangling `depends_on` lists the remaining
-    tasks at exit 0, a cycle fails like `validate`); the orphan-id list
-    as a pure function in the extension. The modals are hand-tested in
-    the dev host — prompt-gated commands are not
+  - A failed status stops blanking the views: `doRefresh`'s catch keeps the last
+    good status in the Tasks tree and graph (no `update(null)`) and shows the
+    error notification when the message changes — today the watcher's
+    `refresh()` passes `notifyOnError = false`, so a broken project silently
+    empties the sidebar with no visible error and looks unrecoverable. The
+    `$(error) PDP` status bar item stays as the persistent signal.
+  - Tests: `pdp delete` and load-without-scaffold in pdp's `tests/test_cli.py`
+    (dir and yml entry gone, missing dir tolerated, dependents refusal, unknown
+    id, deleted dir stays deleted after `status`, status with a dangling
+    `depends_on` lists the remaining tasks at exit 0, a cycle fails like
+    `validate`); the orphan-id list as a pure function in the extension. The
+    modals are hand-tested in the dev host — prompt-gated commands are not
     e2e-tested, as with `pdp init`.
   - Two repos, two commits: the pdp-side changes (the delete command,
-    load-without-scaffold, and the status crash fix) are their own
-    commit/PR in the pdp repo,
-    following that repo's conventions, with a CHANGELOG entry there — the
-    scaffold change affects every pdp user, not just the extension. This
-    step's report links to it. Dev and tests run against the editable
-    install; real users get the features only after a pdp release, which
-    can follow this step rather than block it.
+    load-without-scaffold, and the status crash fix) are their own commit/PR in
+    the pdp repo, following that repo's conventions, with a CHANGELOG entry
+    there — the scaffold change affects every pdp user, not just the extension.
+    This step's report links to it. Dev and tests run against the editable
+    install; real users get the features only after a pdp release, which can
+    follow this step rather than block it.
 - Keybindings in `contributes.keybindings`, prefix `alt+p`:
 
   | Key           | Command                                                 |
@@ -324,18 +318,18 @@ Done; see `docs/report/09-graph-view-and-run-to.md`.
 
   `.focus` commands are auto-generated for contributed views; `space` is an
   accepted chord key. Every binding is gated `!terminalFocus` so the chords
-  never fight the integrated terminal for alt keys (zsh history-search
-  bindings, `commandsToSkipShell`); worst case they pause while the terminal
-  has focus. Known collisions, both user-rebindable: the Project Manager
-  extension historically shipped `alt+p`, and on macOS `opt+p` types `π`,
-  which a chord prefix captures.
+  never fight the integrated terminal for alt keys (zsh history-search bindings,
+  `commandsToSkipShell`); worst case they pause while the terminal has focus.
+  Known collisions, both user-rebindable: the Project Manager extension
+  historically shipped `alt+p`, and on macOS `opt+p` types `π`, which a chord
+  prefix captures.
 
-- Tests: fixture tree tests (pdp.yml first row, task children order,
-  `output/` expanding to its files); execute the `.focus` commands.
-  Keybindings are hand-verified in the development host.
+- Tests: fixture tree tests (pdp.yml first row, task children order, `output/`
+  expanding to its files); execute the `.focus` commands. Keybindings are
+  hand-verified in the development host.
 - Known limit, note in the report: the watchers refresh `**/*.yml` and
-  `**/{input,src,output,hand}/**`, so files created elsewhere in a task
-  folder need a manual Refresh.
+  `**/{input,src,output,hand}/**`, so files created elsewhere in a task folder
+  need a manual Refresh.
 - Report `docs/report/11-tasks-file-tree-delete-and-keybindings.md`.
 
 ### 12. Interactive graph with Cytoscape (supersedes ADR 0004)
@@ -352,13 +346,13 @@ Do this last; steps 10–11 land on the Mermaid renderer first.
   step 10's right-click work and the render smoke test survive.
   `mermaidDefinition` is replaced by a pure `graphElements(status, positions)`
   builder, tested directly.
-- Layout: `breadthfirst` on first render; `preset` when saved positions
-  exist. Tap → `openTask`, `cxttap` → `taskMenu`, `dragfree` → post
-  positions. Dragging moves pixels only: edges always come from
-  `pdp status`, and nothing but node position is editable by default.
-- Positions persist in `context.workspaceState` keyed by project root +
-  task id: sent with the render message, saved on drag end. Per-project,
-  survives restarts.
+- Layout: `breadthfirst` on first render; `preset` when saved positions exist.
+  Tap → `openTask`, `cxttap` → `taskMenu`, `dragfree` → post positions. Dragging
+  moves pixels only: edges always come from `pdp status`, and nothing but node
+  position is editable by default.
+- Positions persist in `context.workspaceState` keyed by project root + task id:
+  sent with the render message, saved on drag end. Per-project, survives
+  restarts.
 - Tooltips become optional (canvas needs a small hover div); the ⚠/✓ label
   marker already satisfies the accessibility rule. Keyboard users unchanged
   (tree, palette, step-11 chords).
@@ -375,8 +369,8 @@ line to "Fresh:". `src/pdp.ts` + tests + docs:
 - `RunReport.current` → `RunReport.fresh`, parsed from `Fresh: `.
 - Guides/plan: install `pdp-helper[dagster]`, upgrade `pdp-helper`; dev runs
   against the PyPI release, editable only while working on pdp itself.
-- Deferred: `dependency_entries` in `status --json` (file/glob dependencies)
-  and a UI for `pdp freshen` and `pdp scaf`.
+- Deferred: `dependency_entries` in `status --json` (file/glob dependencies) and
+  a UI for `pdp freshen` and `pdp scaf`.
 - Report `docs/report/13-pdp-0-2-5-pypi.md`.
 
 ### 14. freshen UI, scaffold in the missing-folder dialog, leaner task rows
@@ -384,36 +378,49 @@ line to "Fresh:". `src/pdp.ts` + tests + docs:
 `src/extension.ts`, `src/pdp.ts`, `src/tasksView.ts`, `src/test/*`,
 `package.json`.
 
-- `pdp.freshenTask` (task + everything downstream) and `pdp.freshenOnly`,
-  from the task context menu (group `6_freshen`), the graph node menu and
-  the palette. A modal confirms ("outputs are not recomputed"); the result
-  parses the `Freshened:` / `Still stale:` / `Freshening made other tasks
-stale:` lines (`parseFreshen`) and offers a **Freshen Downstream** button
+- `pdp.freshenTask` (task + everything downstream) and `pdp.freshenOnly`, from
+  the task context menu (group `6_freshen`), the graph node menu and the
+  palette. A modal confirms ("outputs are not recomputed"); the result parses
+  the `Freshened:` / `Still stale:` / `Freshening made other tasks stale:` lines
+  (`parseFreshen`) and offers a **Freshen Downstream** button
   (`pdp freshen --from <first>`, pdp's own hint). A bare non-zero exit (stale
-  upstream, empty `output/`) is an error; exit 1 with a report (still stale)
-  is a warning.
-- The missing-folder modal offers **Scaffold** (recreate folders from
-  `pdp.yml`) before **Remove**.
+  upstream, empty `output/`) is an error; exit 1 with a report (still stale) is
+  a warning.
+- The missing-folder modal offers **Scaffold** (recreate folders from `pdp.yml`)
+  before **Remove**.
 - PDP: Validate shows pdp's `Warning:` lines instead of hiding them behind
   "Valid project".
-- Task rows for `depends on` / `entrypoint` (and their tooltip lines) are
-  gone: `task.yml`, one click away, is where they are read. Slurm flags
-  stay. Showing `dependency_entries` is moot with the rows gone.
+- Task rows for `depends on` / `entrypoint` (and their tooltip lines) are gone:
+  `task.yml`, one click away, is where they are read. Slurm flags stay. Showing
+  `dependency_entries` is moot with the rows gone.
 - Report `docs/report/14-freshen-scaffold-leaner-task-rows.md`.
 
 ### 15. Graph: compact layout, saved default, new tasks join in place
 
 `src/graphView.ts`, `src/extension.ts`, `package.json`, `src/test/*`.
 
-- Top-down and left-right pack boxes by their measured size (gap constants
-  next to `PAD_X`/`PAD_Y`) instead of stretching to the sidebar: narrow and
-  tall in the sidebar.
-- **PDP: Save Graph Layout as Default** (title bar, palette) stores the
-  current arrangement in `workspaceState`; Reset returns to it. Choosing a
-  layout drops it (the way back to an automatic layout).
-- A task added after the arrangement was saved is placed next to its
-  neighbours; the rest of the graph does not move.
+- Top-down and left-right pack boxes by their measured size (gap constants next
+  to `PAD_X`/`PAD_Y`) instead of stretching to the sidebar: narrow and tall in
+  the sidebar.
+- **PDP: Save Graph Layout as Default** (title bar, palette) stores the current
+  arrangement in `workspaceState`; Reset returns to it. Choosing a layout
+  re-runs that automatic layout and keeps the saved default.
+- A task added after the arrangement was saved is placed next to its neighbours;
+  the rest of the graph does not move.
 - Report `docs/report/15-graph-compact-layout-and-saved-default.md`.
+
+### 16. Hotkeys, layout menu at the cursor, re-run last
+
+See `docs/0002-hotkeys.md` sections A–E: graph and tasks view shortcuts (gated
+on the `pdp.graphFocused` context key), a layout menu inside the webview, a `?`
+cheat sheet and `alt+p .` re-run. Report
+`docs/report/16-hotkeys-and-layout-menu.md`.
+
+### 17. Running-task display
+
+See `docs/0002-hotkeys.md` section G: status bar, tree and graph marks for the
+running task from `pdp run --progress`. Blocked on pdp ≥ 0.2.6 (section F).
+Report `docs/report/17-running-task-display.md`.
 
 ## Development
 
@@ -437,9 +444,9 @@ cd ~/repos/pdpd/pdp
 uv tool install --force --editable ".[dagster]"
 ```
 
-`~/.local/bin/pdp` runs the tool venv, whose `pdp.pth` points at this repo.
-So edits to `pdp/*.py` are live in the terminal and in the extension
-development host immediately, with no reinstall.
+`~/.local/bin/pdp` runs the tool venv, whose `pdp.pth` points at this repo. So
+edits to `pdp/*.py` are live in the terminal and in the extension development
+host immediately, with no reinstall.
 
 Reinstall (same command) only when:
 
@@ -456,18 +463,18 @@ pdp --version
 
 ### Before the pdp release exists
 
-While `--json` is only on a branch, the version check fails against the
-editable install's old version. Bump `version` in `pyproject.toml` as part of
-step 1 and reinstall once.
+While `--json` is only on a branch, the version check fails against the editable
+install's old version. Bump `version` in `pyproject.toml` as part of step 1 and
+reinstall once.
 
-To point the extension at a different pdp (e.g. a worktree), set `pdp.path`
-to that environment's binary, e.g. `/path/to/worktree/.venv/bin/pdp` after
+To point the extension at a different pdp (e.g. a worktree), set `pdp.path` to
+that environment's binary, e.g. `/path/to/worktree/.venv/bin/pdp` after
 `uv sync` there.
 
 ### Remote runs need the same pdp on the cluster
 
-`pdp remote` installs pdp on the cluster from `PDP_REMOTE_SPEC` (default:
-the same `pdp-helper` version as the local tool). To test unreleased
+`pdp remote` installs pdp on the cluster from `PDP_REMOTE_SPEC` (default: the
+same `pdp-helper` version as the local tool). To test unreleased
 `remote status --json` or run changes, pin the branch in the project `.env`:
 
 ```sh
@@ -485,8 +492,8 @@ pnpm install
 pnpm watch          # or let F5 run the default build task
 ```
 
-- F5 opens the development host. Add the fixture folder to `launch.json`
-  `args` so it opens a pdp project: `"${workspaceFolder}/src/test/fixtures/demo"`.
+- F5 opens the development host. Add the fixture folder to `launch.json` `args`
+  so it opens a pdp project: `"${workspaceFolder}/src/test/fixtures/demo"`.
 - `Developer: Reload Window` in the host picks up extension changes.
 - `Output → PDP` shows every pdp invocation and its output.
 - `pnpm test` runs the extension tests; `uv run pytest` in `pdp/` runs the

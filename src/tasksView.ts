@@ -163,6 +163,26 @@ export class PdpTasksProvider implements vscode.TreeDataProvider<vscode.TreeItem
     return item;
   }
 
+  // TreeView.reveal walks up to the root, so parents must be resolvable.
+  getParent(element: vscode.TreeItem): vscode.TreeItem | undefined {
+    if (element instanceof FileItem) {
+      const root = workspaceRoot();
+      const parentDir = path.dirname(element.fsPath);
+      const task = this.current?.tasks.find(
+        (candidate) =>
+          root !== undefined &&
+          taskFolderPath(root, candidate.id) === parentDir,
+      );
+      if (task) {
+        return new TaskItem(task);
+      }
+      if (root && parentDir !== root) {
+        return new FileItem(parentDir);
+      }
+    }
+    return undefined;
+  }
+
   getChildren(element?: vscode.TreeItem): vscode.TreeItem[] {
     if (element instanceof TaskItem || element instanceof FileItem) {
       return element.childItems();

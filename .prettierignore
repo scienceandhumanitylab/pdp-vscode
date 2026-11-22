@@ -2,5 +2,7 @@
 build
 coverage
 media/*.svg
+# pnpm owns this format; reformatting it just churns the lockfile
+pnpm-lock.yaml
 # pdp-authored project files, not ours to reformat
 src/test/fixtures

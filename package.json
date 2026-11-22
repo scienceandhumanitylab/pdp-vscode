@@ -67,6 +67,14 @@
         "title": "PDP: Run To Here"
       },
       {
+        "command": "pdp.runTaskConfirm",
+        "title": "PDP: Run Task (Confirm)"
+      },
+      {
+        "command": "pdp.runToConfirm",
+        "title": "PDP: Run To Here (Confirm)"
+      },
+      {
         "command": "pdp.runFrom",
         "title": "PDP: Run From Here"
       },
@@ -92,6 +100,10 @@
         "icon": "$(trash)"
       },
       {
+        "command": "pdp.cleanTaskConfirm",
+        "title": "PDP: Clean Task (Confirm)"
+      },
+      {
         "command": "pdp.deleteTask",
         "title": "PDP: Delete Task…"
       },
@@ -107,6 +119,14 @@
       {
         "command": "pdp.revealTask",
         "title": "PDP: Reveal Task Folder"
+      },
+      {
+        "command": "pdp.openTaskSrc",
+        "title": "PDP: Open Task Source File"
+      },
+      {
+        "command": "pdp.revealTaskOutput",
+        "title": "PDP: Reveal Task Output"
       },
       {
         "command": "pdp.resetGraphLayout",
@@ -178,6 +198,10 @@
         "icon": "$(browser)"
       },
       {
+        "command": "pdp.showShortcuts",
+        "title": "PDP: Keyboard Shortcuts"
+      },
+      {
         "command": "pdp.stopProcess",
         "title": "PDP: Stop Process",
         "icon": "$(debug-stop)"
@@ -217,6 +241,20 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "pdp.runTaskConfirm",
+          "when": "false"
+        },
+        {
+          "command": "pdp.runToConfirm",
+          "when": "false"
+        },
+        {
+          "command": "pdp.cleanTaskConfirm",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "pdp.runAll",
@@ -297,31 +335,6 @@
           "command": "pdp.remoteStop",
           "when": "view == pdp.remote",
           "group": "3_stop@1"
-        },
-        {
-          "command": "pdp.graphZoomIn",
-          "when": "view == pdp.graph",
-          "group": "navigation@1"
-        },
-        {
-          "command": "pdp.graphZoomOut",
-          "when": "view == pdp.graph",
-          "group": "navigation@2"
-        },
-        {
-          "command": "pdp.graphChooseLayout",
-          "when": "view == pdp.graph",
-          "group": "navigation@3"
-        },
-        {
-          "command": "pdp.saveGraphLayout",
-          "when": "view == pdp.graph",
-          "group": "navigation@4"
-        },
-        {
-          "command": "pdp.resetGraphLayout",
-          "when": "view == pdp.graph",
-          "group": "navigation@5"
         }
       ],
       "view/item/context": [
@@ -376,6 +389,11 @@
           "group": "3_open@2"
         },
         {
+          "command": "pdp.openTaskSrc",
+          "when": "view == pdp.tasks && viewItem == task",
+          "group": "3_open@3"
+        },
+        {
           "command": "pdp.cleanTask",
           "when": "view == pdp.tasks && viewItem == task",
           "group": "4_clean@1"
@@ -427,6 +445,99 @@
         "command": "pdp.runAll",
         "key": "alt+p space",
         "when": "pdp.hasProject && !terminalFocus"
+      },
+      {
+        "command": "pdp.graphZoomIn",
+        "key": "i",
+        "when": "pdp.graphFocused && !terminalFocus"
+      },
+      {
+        "command": "pdp.graphZoomOut",
+        "key": "o",
+        "when": "pdp.graphFocused && !terminalFocus"
+      },
+      {
+        "command": "pdp.graphChooseLayout",
+        "key": "l",
+        "when": "pdp.graphFocused && !terminalFocus"
+      },
+      {
+        "command": "pdp.saveGraphLayout",
+        "key": "s",
+        "when": "pdp.graphFocused && !terminalFocus"
+      },
+      {
+        "command": "pdp.resetGraphLayout",
+        "key": "r",
+        "when": "pdp.graphFocused && !terminalFocus"
+      },
+      {
+        "command": "pdp.runTaskConfirm",
+        "key": "r",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.cleanTaskConfirm",
+        "key": "c",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.runToConfirm",
+        "key": "t",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.freshenTask",
+        "key": "f",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.deleteTask",
+        "key": "d",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.openTaskSrc",
+        "key": "s",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.revealTaskOutput",
+        "key": "o",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": {
+          "selected": true
+        }
+      },
+      {
+        "command": "pdp.showShortcuts",
+        "key": "shift+/",
+        "when": "pdp.graphFocused && !terminalFocus",
+        "args": "graph"
+      },
+      {
+        "command": "pdp.showShortcuts",
+        "key": "shift+/",
+        "when": "focusedView == pdp.tasks && !terminalFocus",
+        "args": "tasks"
       }
     ],
     "configuration": {

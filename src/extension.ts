@@ -16,6 +16,8 @@ const tasksProvider = new PdpTasksProvider();
 const processes = new ProcessRegistry();
 const remoteProvider = new PdpRemoteProvider(processes);
 export let graphView: PdpGraphViewProvider | null = null;
+// Keybindings read the focused row through the tree's own selection.
+export let tasksTree: vscode.TreeView<vscode.TreeItem> | null = null;
 let lastStatus: pdp.ProjectStatus | null = null;
 let lastError: string | null = null;
 let refreshing: Promise<pdp.ProjectStatus | null> | null = null;
@@ -32,11 +34,12 @@ export function activate(context: vscode.ExtensionContext): void {
     (id) => void openTaskYml(id),
     (id) => void taskMenu(id),
   );
+  tasksTree = vscode.window.createTreeView("pdp.tasks", {
+    treeDataProvider: tasksProvider,
+  });
   context.subscriptions.push(
     ...registerCommands(),
-    vscode.window.createTreeView("pdp.tasks", {
-      treeDataProvider: tasksProvider,
-    }),
+    tasksTree,
     vscode.window.createTreeView("pdp.remote", {
       treeDataProvider: remoteProvider,
     }),
@@ -172,6 +175,14 @@ function registerCommands(): vscode.Disposable[] {
     register("pdp.runTask", (arg) =>
       withTask(arg, (id) => runWithProgress([id], `PDP: Run ${id}`)),
     ),
+    register("pdp.runTaskConfirm", (arg) =>
+      confirmThen(
+        arg,
+        "Run",
+        "Runs pdp run <id>: the task and any stale upstream tasks.",
+        "pdp.runTask",
+      ),
+    ),
     register("pdp.runOnly", (arg) =>
       withTask(arg, (id) =>
         runWithProgress([id, "--only"], `PDP: Run only ${id}`),
@@ -179,6 +190,14 @@ function registerCommands(): vscode.Disposable[] {
     ),
     register("pdp.runTo", (arg) =>
       withTask(arg, (id) => runWithProgress(["--to", id], `PDP: Run to ${id}`)),
+    ),
+    register("pdp.runToConfirm", (arg) =>
+      confirmThen(
+        arg,
+        "Run to",
+        "Runs pdp run --to <id>: the task and everything upstream of it.",
+        "pdp.runTo",
+      ),
     ),
     register("pdp.runFrom", (arg) =>
       withTask(arg, (id) =>
@@ -206,6 +225,14 @@ function registerCommands(): vscode.Disposable[] {
     register("pdp.cleanTask", (arg) =>
       withTask(arg, (id) => execSimple(["clean", id], `PDP: Cleaned ${id}`)),
     ),
+    register("pdp.cleanTaskConfirm", (arg) =>
+      confirmThen(
+        arg,
+        "Clean",
+        "Runs pdp clean <id>, which removes the task's outputs.",
+        "pdp.cleanTask",
+      ),
+    ),
     register("pdp.deleteTask", (arg) => withTask(arg, deleteTask)),
     register("pdp.cleanAll", () => execSimple(["clean"], "PDP: Cleaned all")),
     register("pdp.validate", validateProject),
@@ -214,12 +241,15 @@ function registerCommands(): vscode.Disposable[] {
     register("pdp.create", createTask),
 
     register("pdp.openTask", (arg) => withTask(arg, openTaskYml)),
+    register("pdp.openTaskSrc", (arg) => withTask(arg, openTaskSrc)),
     register("pdp.revealTask", (arg) => withTask(arg, revealTaskFolder)),
+    register("pdp.revealTaskOutput", (arg) => withTask(arg, revealTaskOutput)),
     register("pdp.saveGraphLayout", () => graphView?.saveDefault()),
     register("pdp.resetGraphLayout", () => graphView?.resetLayout()),
     register("pdp.graphZoomIn", () => graphView?.zoomBy(1.25)),
     register("pdp.graphZoomOut", () => graphView?.zoomBy(1 / 1.25)),
     register("pdp.graphChooseLayout", chooseGraphLayout),
+    register("pdp.showShortcuts", showShortcuts),
 
     register("pdp.dagsterLocal", () => startDagster(false)),
     register("pdp.dagsterSlurm", () => startDagster(true)),
@@ -495,6 +525,7 @@ const TASK_MENU_ACTIONS = [
   { label: "Freshen only", command: "pdp.freshenOnly" },
   { label: "Clean", command: "pdp.cleanTask" },
   { label: "Open task.yml", command: "pdp.openTask" },
+  { label: "Open source file", command: "pdp.openTaskSrc" },
   { label: "Delete…", command: "pdp.deleteTask" },
 ];
 
@@ -508,7 +539,95 @@ async function taskMenu(id: string): Promise<void> {
   }
 }
 
+// The ? cheat sheet mirrors the A and C keybindings.
+// shortcut: the extension API cannot read user keybindings, so the list
+// shows the defaults; Customize… shows the real ones.
+const SHORTCUTS: Record<
+  "graph" | "tasks",
+  { key: string; label: string; command: string }[]
+> = {
+  graph: [
+    { key: "i", label: "Zoom in", command: "pdp.graphZoomIn" },
+    { key: "o", label: "Zoom out", command: "pdp.graphZoomOut" },
+    { key: "l", label: "Choose layout", command: "pdp.graphChooseLayout" },
+    {
+      key: "s",
+      label: "Save layout as default",
+      command: "pdp.saveGraphLayout",
+    },
+    { key: "r", label: "Reset layout", command: "pdp.resetGraphLayout" },
+  ],
+  tasks: [
+    { key: "Enter", label: "Open task.yml", command: "pdp.openTask" },
+    { key: "r", label: "Run task", command: "pdp.runTaskConfirm" },
+    { key: "c", label: "Clean task", command: "pdp.cleanTaskConfirm" },
+    { key: "t", label: "Run to here", command: "pdp.runToConfirm" },
+    {
+      key: "f",
+      label: "Freshen task (and downstream)",
+      command: "pdp.freshenTask",
+    },
+    { key: "d", label: "Delete task…", command: "pdp.deleteTask" },
+    { key: "s", label: "Open source file", command: "pdp.openTaskSrc" },
+    {
+      key: "o",
+      label: "Reveal output folder",
+      command: "pdp.revealTaskOutput",
+    },
+  ],
+};
+
+async function showShortcuts(arg: unknown): Promise<void> {
+  const scopes: ("graph" | "tasks")[] =
+    arg === "graph" || arg === "tasks" ? [arg] : ["graph", "tasks"];
+  const items: (vscode.QuickPickItem & {
+    command: string;
+    selected: boolean;
+  })[] = [];
+  for (const scope of scopes) {
+    if (scopes.length > 1) {
+      items.push({
+        label: scope === "graph" ? "Graph" : "Tasks",
+        kind: vscode.QuickPickItemKind.Separator,
+        command: "",
+        selected: false,
+      });
+    }
+    for (const entry of SHORTCUTS[scope]) {
+      items.push({
+        label: entry.key,
+        description: entry.label,
+        command: entry.command,
+        selected: scope === "tasks",
+      });
+    }
+  }
+  items.push({
+    label: "Customize…",
+    description: "open the Keyboard Shortcuts page",
+    command: "workbench.action.openGlobalKeybindings",
+    selected: false,
+  });
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: "PDP: Keyboard shortcuts",
+  });
+  if (!picked) {
+    return;
+  }
+  if (picked.command === "workbench.action.openGlobalKeybindings") {
+    await vscode.commands.executeCommand(picked.command, "pdp.");
+    return;
+  }
+  await vscode.commands.executeCommand(
+    picked.command,
+    ...(picked.selected ? [{ selected: true }] : []),
+  );
+}
+
 async function chooseGraphLayout(): Promise<void> {
+  if (graphView?.openLayoutMenu()) {
+    return;
+  }
   const picked = await vscode.window.showQuickPick(GRAPH_LAYOUTS, {
     placeHolder: "Graph layout",
   });
@@ -532,6 +651,18 @@ async function taskFromArgOrPick(
 ): Promise<pdp.TaskStatus | undefined> {
   if (arg instanceof TaskItem) {
     return arg.task;
+  }
+  // Keybindings pass { selected: true }: act on the focused row when it is a
+  // task; any other selection (pdp.yml, a file) falls through to the pick.
+  if (
+    typeof arg === "object" &&
+    arg !== null &&
+    (arg as { selected?: unknown }).selected === true
+  ) {
+    const picked = tasksTree?.selection[0];
+    if (picked instanceof TaskItem) {
+      return picked.task;
+    }
   }
   // Dispatched commands pass a task id string; check its shape and validate
   // it against the last status so nothing unknown or forged reaches pdp.
@@ -767,6 +898,26 @@ async function promptMissingFolders(status: pdp.ProjectStatus): Promise<void> {
   }
 }
 
+// The keyboard path confirms before running; inline buttons and context
+// menus keep calling the unconfirmed commands.
+async function confirmThen(
+  arg: unknown,
+  verb: string,
+  detail: string,
+  command: string,
+): Promise<void> {
+  await withTask(arg, async (id) => {
+    const choice = await vscode.window.showWarningMessage(
+      `${verb} "${id}"?`,
+      { modal: true, detail },
+      verb,
+    );
+    if (choice === verb) {
+      await vscode.commands.executeCommand(command, id);
+    }
+  });
+}
+
 async function openTaskYml(id: string): Promise<void> {
   const folder = taskFolder(id);
   if (!folder) {
@@ -790,6 +941,62 @@ async function revealTaskFolder(id: string): Promise<void> {
     "revealInExplorer",
     vscode.Uri.file(folder),
   );
+}
+
+async function revealTaskOutput(id: string): Promise<void> {
+  const folder = taskFolder(id);
+  if (!folder) {
+    return;
+  }
+  const output = path.join(folder, "output");
+  if (!fs.existsSync(output)) {
+    vscode.window.showInformationMessage(
+      `PDP: ${id} has no output/ folder yet`,
+    );
+    return;
+  }
+  await vscode.commands.executeCommand(
+    "revealInExplorer",
+    vscode.Uri.file(output),
+  );
+}
+
+async function openTaskSrc(id: string): Promise<void> {
+  const folder = taskFolder(id);
+  if (!folder) {
+    return;
+  }
+  const src = path.join(folder, "src");
+  const uris = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(src, "**/*"),
+  );
+  if (uris.length === 0) {
+    const choice = await vscode.window.showInformationMessage(
+      `PDP: No files in ${id}/src`,
+      "Reveal Folder",
+    );
+    if (choice === "Reveal Folder") {
+      await vscode.commands.executeCommand("pdp.revealTask", id);
+    }
+    return;
+  }
+  if (uris.length === 1) {
+    await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(uris[0]),
+    );
+    return;
+  }
+  const picked = await vscode.window.showQuickPick(
+    uris
+      .map((uri) => ({ label: path.relative(src, uri.fsPath), uri }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    { placeHolder: `Source file for ${id}` },
+  );
+  if (picked) {
+    await vscode.window.showTextDocument(
+      await vscode.workspace.openTextDocument(picked.uri),
+    );
+  }
 }
 
 async function showError(message: string): Promise<void> {

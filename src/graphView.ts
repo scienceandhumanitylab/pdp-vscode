@@ -225,17 +225,44 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
 <style>
-  body { margin: 0; }
-  #graph { position: relative; width: 100%; height: 100vh; }
+  body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+  #graph { position: relative; width: 100%; flex: 1; min-height: 0; }
   #tip { position: absolute; display: none; padding: 2px 6px; border-radius: 3px;
     font-size: 12px; white-space: nowrap; pointer-events: none; z-index: 10;
     background: var(--vscode-editorHoverWidget-background, #2d2d30);
     color: var(--vscode-editorHoverWidget-foreground, #cccccc);
     border: 1px solid var(--vscode-editorHoverWidget-border, #454545); }
+  #toolbar { display: flex; justify-content: flex-end; gap: 2px; padding: 4px; }
+  #toolbar[hidden] { display: none; }
+  #toolbar button { min-width: 24px; height: 22px; padding: 0 6px; border-radius: 2px;
+    font: 12px var(--vscode-font-family, sans-serif); cursor: pointer;
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: 1px solid var(--vscode-contrastBorder, transparent); }
+  #toolbar button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+  #toolbar button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+  #layoutMenu { position: absolute; z-index: 20; padding: 2px 0; white-space: nowrap;
+    background: var(--vscode-menu-background);
+    color: var(--vscode-menu-foreground);
+    border: 1px solid var(--vscode-menu-border, var(--vscode-contrastBorder, transparent)); }
+  #layoutMenu[hidden] { display: none; }
+  #layoutMenu [role="menuitemradio"] { padding: 3px 10px; cursor: pointer;
+    font: 12px var(--vscode-font-family, sans-serif); }
+  #layoutMenu [role="menuitemradio"]:focus { outline: 1px solid var(--vscode-focusBorder);
+    background: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground); }
 </style>
 </head>
 <body>
+<div id="toolbar" role="group" aria-label="Graph actions" hidden>
+  <button type="button" data-action="zoomIn" aria-label="Zoom in (I)" title="Zoom in (I)" aria-keyshortcuts="i">+</button>
+  <button type="button" data-action="zoomOut" aria-label="Zoom out (O)" title="Zoom out (O)" aria-keyshortcuts="o">−</button>
+  <button type="button" data-action="layout" aria-label="Choose layout (L)" title="Choose layout (L)" aria-keyshortcuts="l">Layout</button>
+  <button type="button" data-action="save" aria-label="Save layout as default (S)" title="Save layout as default (S)" aria-keyshortcuts="s">Save</button>
+  <button type="button" data-action="reset" aria-label="Reset layout (R)" title="Reset layout (R)" aria-keyshortcuts="r">Reset</button>
+</div>
 <div id="graph" role="img" aria-label="PDP task graph"></div>
+<div id="layoutMenu" role="menu" aria-label="Graph layout" hidden></div>
 <script src="${scriptUri}"></script>
 <script type="module" nonce="${nonce}">
   const cytoscape = globalThis.cytoscape;
@@ -244,6 +271,117 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
   const tip = document.createElement("div");
   tip.id = "tip";
   document.body.appendChild(tip);
+  const toolbar = document.getElementById("toolbar");
+  const layoutMenu = document.getElementById("layoutMenu");
+  const layoutButton = toolbar.querySelector('button[data-action="layout"]');
+  let layouts = [];
+  let currentLayout = "top-down";
+  toolbar.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (button) {
+      if (button.dataset.action === "layout") {
+        // keyboard "clicks" carry 0,0; fall back to the button's position
+        openLayoutMenu(event.detail === 0 ? undefined : event.clientX, event.clientY);
+        return;
+      }
+      vscode.postMessage({ type: "toolbar", action: button.dataset.action });
+    }
+  });
+
+  // The menu is HTML because the VS Code API cannot position a QuickPick.
+  // shortcut: the layout list is host-provided and re-built on every open;
+  // rebuild on focus too if a re-render mid-open ever matters.
+  function buildLayoutItems() {
+    layoutMenu.textContent = "";
+    layouts.forEach((entry) => {
+      const item = document.createElement("div");
+      item.setAttribute("role", "menuitemradio");
+      item.tabIndex = -1;
+      const checked = entry.name === currentLayout;
+      item.setAttribute("aria-checked", checked ? "true" : "false");
+      item.textContent =
+        (checked ? "✓ " : "   ") + entry.label + " — " + entry.description;
+      item.dataset.name = entry.name;
+      item.addEventListener("click", () => postChooseLayout(entry.name));
+      layoutMenu.appendChild(item);
+    });
+  }
+
+  function openLayoutMenu(x, y) {
+    if (layouts.length === 0) {
+      return;
+    }
+    buildLayoutItems();
+    layoutMenu.hidden = false;
+    if (x === undefined) {
+      const rect = layoutButton.getBoundingClientRect();
+      x = rect.left;
+      y = rect.bottom;
+    }
+    layoutMenu.style.left =
+      Math.max(0, Math.min(x, window.innerWidth - layoutMenu.offsetWidth)) +
+      "px";
+    layoutMenu.style.top =
+      Math.max(
+        0,
+        Math.min(y, window.innerHeight - layoutMenu.offsetHeight),
+      ) + "px";
+    tip.style.display = "none";
+    (layoutMenu.querySelector('[aria-checked="true"]') ?? layoutMenu.firstChild)
+      .focus();
+  }
+
+  function closeLayoutMenu() {
+    if (layoutMenu.hidden) {
+      return;
+    }
+    layoutMenu.hidden = true;
+    layoutButton.focus();
+  }
+
+  function postChooseLayout(name) {
+    vscode.postMessage({ type: "chooseLayout", name: name });
+    closeLayoutMenu();
+  }
+
+  layoutMenu.addEventListener("keydown", (event) => {
+    const items = Array.from(layoutMenu.children);
+    const i = items.indexOf(document.activeElement);
+    const move = (next) => {
+      event.preventDefault();
+      items[next].focus();
+    };
+    if (event.key === "ArrowDown") {
+      move((i + 1) % items.length);
+    } else if (event.key === "ArrowUp") {
+      move((i - 1 + items.length) % items.length);
+    } else if (event.key === "Home") {
+      move(0);
+    } else if (event.key === "End") {
+      move(items.length - 1);
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      postChooseLayout(document.activeElement.dataset.name);
+    } else if (event.key === "Escape" || event.key === "Tab") {
+      closeLayoutMenu();
+    }
+  });
+
+  // Focus leaving the menu, or a pointerdown outside it, dismiss it.
+  layoutMenu.addEventListener("focusout", (event) => {
+    if (!layoutMenu.contains(event.relatedTarget)) {
+      closeLayoutMenu();
+    }
+  });
+  window.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (!layoutMenu.hidden && !layoutMenu.contains(event.target)) {
+        closeLayoutMenu();
+      }
+    },
+    true,
+  );
   let cy = null;
   let ids = [];
   let labels = [];
@@ -267,6 +405,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     if (data.type === "empty") {
       clearTimeout(saveTimer);
       if (cy) { cy.destroy(); cy = null; }
+      toolbar.hidden = true;
       container.textContent = data.message;
       return;
     }
@@ -277,11 +416,15 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
       }
       return;
     }
+    if (data.type === "layoutMenu") {
+      openLayoutMenu();
+      return;
+    }
     if (data.type !== "render" && data.type !== "zoom") {
       return;
     }
     if (data.type === "zoom") {
-      // The title-bar buttons; zooming about the view's centre. The zoom
+      // The toolbar zoom buttons; zooming about the view's centre. The zoom
       // handler below persists the result like a wheel zoom.
       if (
         cy &&
@@ -301,6 +444,9 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     }
     ids = data.ids ?? [];
     labels = data.labels ?? [];
+    layouts = data.layouts ?? [];
+    currentLayout = data.layout ?? "top-down";
+    toolbar.hidden = false;
     render(data.elements, data.preset, data.viewport, data.layout, data.dark, data.fontSize);
   });
 
@@ -376,7 +522,8 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     return {
       name: "breadthfirst",
       directed: true,
-      maximal: true,
+      // No maximal: in cytoscape 3.35 it throws when a node leaves a shared
+      // tier, leaving every box stacked at the origin.
       avoidOverlap: true,
       spacingFactor: 1,
       boundingBox: { x1: 0, y1: 0, w: 1, h: 1 },
@@ -525,7 +672,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
       const p = event.target.renderedPosition();
       tip.textContent = label;
       tip.style.left = Math.round(p.x + 12) + "px";
-      tip.style.top = Math.round(p.y + 14) + "px";
+      tip.style.top = Math.round(container.offsetTop + p.y + 14) + "px";
       tip.style.display = "block";
     });
     cy.on("mouseout", "node", () => {
@@ -578,6 +725,13 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
     layout.run();
   }
 
+  window.addEventListener("focus", () => {
+    vscode.postMessage({ type: "focus", focused: true });
+  });
+  window.addEventListener("blur", () => {
+    vscode.postMessage({ type: "focus", focused: false });
+  });
+
   vscode.postMessage({ type: "ready" });
 </script>
 </body>
@@ -590,6 +744,9 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | null = null;
   private status: ProjectStatus | null = null;
   private defaultRequested = false;
+  // focusedView misses webview iframes, so the graph sets its own context
+  // key from focus messages.
+  focused = false;
   private readonly onOpenTask: (id: string) => void;
   private readonly onTaskMenu: (id: string) => void;
   private readonly themeListener: vscode.Disposable;
@@ -645,6 +802,9 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
         .toString(),
     );
     view.webview.onDidReceiveMessage((message) => {
+      if (typeof message !== "object" || message === null) {
+        return;
+      }
       if (message.type === "ready") {
         this.pushStatus();
       }
@@ -666,6 +826,20 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
           this.defaultRequested = false;
         }
       }
+      if (message.type === "focus") {
+        this.focused = message.focused === true;
+        void vscode.commands.executeCommand(
+          "setContext",
+          "pdp.graphFocused",
+          this.focused,
+        );
+      }
+      if (message.type === "chooseLayout" && typeof message.name === "string") {
+        void this.chooseLayout(message.name);
+      }
+      if (message.type === "toolbar") {
+        this.toolbarAction(message.action);
+      }
       if (message.type === "openTask" || message.type === "taskMenu") {
         const task = this.taskAt(message.node);
         if (task) {
@@ -680,6 +854,12 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
     view.onDidDispose(() => {
       if (this.view === view) {
         this.view = null;
+        this.focused = false;
+        void vscode.commands.executeCommand(
+          "setContext",
+          "pdp.graphFocused",
+          false,
+        );
       }
     });
   }
@@ -792,24 +972,52 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
     this.pushStatus();
   }
 
-  // Title-bar zoom buttons; the webview centres the zoom and the existing
-  // save path persists the result.
+  // The toolbar lives in the webview because title-bar clicks near it often
+  // hit the pane header and collapse the view. Its action name is untrusted.
+  private toolbarAction(action: unknown): void {
+    const actions: Record<string, () => unknown> = {
+      zoomIn: () => this.zoomBy(1.25),
+      zoomOut: () => this.zoomBy(1 / 1.25),
+      save: () => this.saveDefault(),
+      reset: () => this.resetLayout(),
+    };
+    if (typeof action === "string" && Object.hasOwn(actions, action)) {
+      void actions[action]();
+    }
+  }
+
+  // The webview's own menu needs the host to say when: the keybinding
+  // path calls this, and the palette falls back to the QuickPick.
+  openLayoutMenu(): boolean {
+    if (!this.view || !this.focused) {
+      return false;
+    }
+    void this.view.webview.postMessage({ type: "layoutMenu" });
+    return true;
+  }
+
+  // Zoom buttons; the webview centres the zoom and the existing save path
+  // persists the result.
   zoomBy(factor: number): void {
     void this.view?.webview.postMessage({ type: "zoom", factor });
   }
 
-  // Switching the automatic layout means new geometry: the old positions,
-  // viewport and saved default described the previous layout, so all go.
+  // Switching the automatic layout means new geometry: the old positions
+  // and viewport go, but the saved default stays for Reset to return to.
   async chooseLayout(name: string): Promise<void> {
     const root = workspaceRoot();
     const layoutName = validLayoutName(name);
     if (!root || !layoutName) {
       return;
     }
-    await this.storage.update(positionsKey(root), {
-      positions: {},
-      layout: layoutName,
-    });
+    const current = validLayout(
+      this.storage.get<GraphLayout>(positionsKey(root)),
+    );
+    const chosen: GraphLayout = { positions: {}, layout: layoutName };
+    if (current.saved) {
+      chosen.saved = current.saved;
+    }
+    await this.storage.update(positionsKey(root), chosen);
     this.pushStatus();
   }
 
@@ -845,6 +1053,11 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
       ),
       viewport: layout.viewport,
       layout: layout.layout ?? "top-down",
+      layouts: GRAPH_LAYOUTS.map(({ label, description, name }) => ({
+        label,
+        description,
+        name,
+      })),
       dark,
       fontSize: graphFontSize(),
     });

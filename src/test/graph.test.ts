@@ -339,7 +339,7 @@ suite("graph", () => {
     provider.dispose();
   });
 
-  test("a saved default survives drags, reset restores it, and choosing a layout drops it", async () => {
+  test("a saved default survives drags, reset restores it, even after choosing a layout", async () => {
     const posted: Record<string, unknown>[] = [];
     const listeners: Array<(message: unknown) => void> = [];
     const view = {
@@ -429,6 +429,20 @@ suite("graph", () => {
       { x: 3, y: 3 },
     );
 
+    // Trying an automatic layout keeps the default; Reset comes back to it.
+    await provider.chooseLayout("left-right");
+    assert.deepStrictEqual(storage.saved[key], {
+      positions: {},
+      layout: "left-right",
+      saved,
+    });
+    await provider.resetLayout();
+    assert.deepStrictEqual(storage.saved[key], {
+      ...saved,
+      layout: "left-right",
+      saved,
+    });
+
     // Junk in a persisted default never reaches the canvas.
     storage.saved[key] = {
       positions: {},
@@ -437,11 +451,300 @@ suite("graph", () => {
     await provider.resetLayout();
     assert.deepStrictEqual(storage.saved[key], { positions: {} });
 
+    storage.saved[key] = {
+      positions: {},
+      saved: { positions: { fetch: { x: "no", y: 1 } }, viewport: "big" },
+    };
     await provider.chooseLayout("left-right");
     assert.deepStrictEqual(storage.saved[key], {
       positions: {},
       layout: "left-right",
     });
+    provider.dispose();
+  });
+
+  test("focus messages set pdp.graphFocused and the focused field, dispose clears it", async () => {
+    const listeners: Array<(message: unknown) => void> = [];
+    const disposes: Array<() => void> = [];
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: (listener: (message: unknown) => void) => {
+          listeners.push(listener);
+          return { dispose: () => undefined };
+        },
+        postMessage: () => Promise.resolve(true),
+      },
+      onDidDispose: (listener: () => void) => {
+        disposes.push(listener);
+        return { dispose: () => undefined };
+      },
+    } as unknown as vscode.WebviewView;
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      stubMemento(),
+      () => undefined,
+      () => undefined,
+    );
+    const originalExecute = vscode.commands.executeCommand;
+    const contexts: unknown[][] = [];
+    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+      if (command === "setContext") {
+        contexts.push(args);
+      }
+      return Promise.resolve(undefined);
+    }) as typeof vscode.commands.executeCommand;
+
+    try {
+      provider.resolveWebviewView(view);
+      const send = (message: unknown) =>
+        listeners.forEach((listener) => listener(message));
+      send({ type: "focus", focused: true });
+      assert.strictEqual(provider.focused, true);
+      assert.deepStrictEqual(contexts.at(-1), ["pdp.graphFocused", true]);
+      send({ type: "focus", focused: false });
+      assert.strictEqual(provider.focused, false);
+      assert.deepStrictEqual(contexts.at(-1), ["pdp.graphFocused", false]);
+      // The focused flag is untrusted webview input: junk values read false.
+      send({ type: "focus", focused: "yes" });
+      assert.strictEqual(provider.focused, false);
+
+      send({ type: "focus", focused: true });
+      disposes.forEach((dispose) => dispose());
+      assert.strictEqual(provider.focused, false);
+      assert.deepStrictEqual(contexts.at(-1), ["pdp.graphFocused", false]);
+    } finally {
+      vscode.commands.executeCommand = originalExecute;
+      provider.dispose();
+    }
+  });
+
+  test("toolbar buttons carry shortcut hints and aria-keyshortcuts", () => {
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: () => ({ dispose: () => undefined }),
+        postMessage: () => Promise.resolve(true),
+      },
+      onDidDispose: () => ({ dispose: () => undefined }),
+    } as unknown as vscode.WebviewView & { webview: { html: string } };
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      stubMemento(),
+      () => undefined,
+      () => undefined,
+    );
+    provider.resolveWebviewView(view);
+    for (const [action, label, key] of [
+      ["zoomIn", "Zoom in (I)", "i"],
+      ["zoomOut", "Zoom out (O)", "o"],
+      ["layout", "Choose layout (L)", "l"],
+      ["save", "Save layout as default (S)", "s"],
+      ["reset", "Reset layout (R)", "r"],
+    ]) {
+      assert.ok(
+        view.webview.html.includes(
+          `data-action="${action}" aria-label="${label}" title="${label}" aria-keyshortcuts="${key}"`,
+        ),
+        `no ${label} button`,
+      );
+    }
+    assert.ok(
+      view.webview.html.includes(
+        `id="layoutMenu" role="menu" aria-label="Graph layout" hidden`,
+      ),
+      "no layout menu container",
+    );
+    assert.ok(
+      view.webview.html.includes("menuitemradio"),
+      "no menu item role in the webview script",
+    );
+    assert.ok(
+      view.webview.html.includes("var(--vscode-menu-background)") &&
+        view.webview.html.includes("var(--vscode-menu-selectionBackground)"),
+      "layout menu CSS is not on theme colours",
+    );
+    provider.dispose();
+  });
+
+  test("chooseLayout messages store the layout, junk changes nothing, and the render lists the layouts", async () => {
+    const posted: Record<string, unknown>[] = [];
+    const listeners: Array<(message: unknown) => void> = [];
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: (listener: (message: unknown) => void) => {
+          listeners.push(listener);
+          return { dispose: () => undefined };
+        },
+        postMessage: (message: Record<string, unknown>) => {
+          posted.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      onDidDispose: () => ({ dispose: () => undefined }),
+    } as unknown as vscode.WebviewView;
+    const storage = stubMemento();
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      storage,
+      () => undefined,
+      () => undefined,
+    );
+    provider.resolveWebviewView(view);
+    provider.update(status);
+    const send = (message: unknown) =>
+      listeners.forEach((listener) => listener(message));
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    const render = posted.find((message) => message.type === "render");
+    assert.deepStrictEqual(
+      (render?.layouts as { name: string }[]).map((layout) => layout.name),
+      ["top-down", "left-right", "force"],
+    );
+
+    const key = positionsKey(workspaceRoot() ?? "");
+    send({ type: "chooseLayout", name: "left-right" });
+    await tick();
+    assert.deepStrictEqual(storage.saved[key], {
+      positions: {},
+      layout: "left-right",
+    });
+
+    // The name is untrusted: unknown, non-string and missing change nothing.
+    send({ type: "chooseLayout", name: "constructor" });
+    send({ type: "chooseLayout", name: 42 });
+    send({ type: "chooseLayout" });
+    await tick();
+    assert.deepStrictEqual(storage.saved[key], {
+      positions: {},
+      layout: "left-right",
+    });
+    provider.dispose();
+  });
+
+  test("openLayoutMenu posts layoutMenu only when focused; the toolbar layout action stays in the webview", async () => {
+    const posted: Record<string, unknown>[] = [];
+    const listeners: Array<(message: unknown) => void> = [];
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: (listener: (message: unknown) => void) => {
+          listeners.push(listener);
+          return { dispose: () => undefined };
+        },
+        postMessage: (message: Record<string, unknown>) => {
+          posted.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      onDidDispose: () => ({ dispose: () => undefined }),
+    } as unknown as vscode.WebviewView;
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      stubMemento(),
+      () => undefined,
+      () => undefined,
+    );
+    provider.resolveWebviewView(view);
+    const send = (message: unknown) =>
+      listeners.forEach((listener) => listener(message));
+
+    assert.strictEqual(provider.openLayoutMenu(), false);
+    assert.strictEqual(posted.length, 0, "posted while not focused");
+    send({ type: "focus", focused: true });
+    assert.strictEqual(provider.openLayoutMenu(), true);
+    assert.deepStrictEqual(posted, [{ type: "layoutMenu" }]);
+
+    // The layout button is webview-owned now: the toolbar action must not
+    // reach pdp.graphChooseLayout.
+    const originalExecute = vscode.commands.executeCommand;
+    const commands: string[] = [];
+    vscode.commands.executeCommand = ((command: string) => {
+      commands.push(command);
+      return Promise.resolve(undefined);
+    }) as typeof vscode.commands.executeCommand;
+    try {
+      send({ type: "toolbar", action: "layout" });
+      send({ type: "focus", focused: false });
+      assert.strictEqual(provider.openLayoutMenu(), false);
+      assert.strictEqual(posted.length, 1, "posted while not focused");
+      assert.ok(
+        !commands.includes("pdp.graphChooseLayout"),
+        "toolbar layout action still runs the QuickPick command",
+      );
+    } finally {
+      vscode.commands.executeCommand = originalExecute;
+      provider.dispose();
+    }
+  });
+
+  test("the in-graph toolbar replaces the title-bar buttons, which collapsed the view", async () => {
+    const posted: Record<string, unknown>[] = [];
+    const listeners: Array<(message: unknown) => void> = [];
+    const view = {
+      webview: {
+        asWebviewUri: (uri: vscode.Uri) => uri,
+        onDidReceiveMessage: (listener: (message: unknown) => void) => {
+          listeners.push(listener);
+          return { dispose: () => undefined };
+        },
+        postMessage: (message: Record<string, unknown>) => {
+          posted.push(message);
+          return Promise.resolve(true);
+        },
+      },
+      onDidDispose: () => ({ dispose: () => undefined }),
+    } as unknown as vscode.WebviewView & { webview: { html: string } };
+    const provider = new PdpGraphViewProvider(
+      vscode.Uri.file("/ext"),
+      stubMemento(),
+      () => undefined,
+      () => undefined,
+    );
+    provider.resolveWebviewView(view);
+    for (const [action, label] of [
+      ["zoomIn", "Zoom in (I)"],
+      ["zoomOut", "Zoom out (O)"],
+      ["layout", "Choose layout (L)"],
+      ["save", "Save layout as default (S)"],
+      ["reset", "Reset layout (R)"],
+    ]) {
+      assert.ok(
+        view.webview.html.includes(
+          `data-action="${action}" aria-label="${label}"`,
+        ),
+        `no ${label} button`,
+      );
+    }
+
+    const send = (message: unknown) =>
+      listeners.forEach((listener) => listener(message));
+    send({ type: "toolbar", action: "zoomIn" });
+    assert.deepStrictEqual(posted.at(-1), { type: "zoom", factor: 1.25 });
+    send({ type: "toolbar", action: "zoomOut" });
+    assert.deepStrictEqual(posted.at(-1), { type: "zoom", factor: 1 / 1.25 });
+    // Reset re-renders: with no status yet that is the "no project" message.
+    send({ type: "toolbar", action: "reset" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.strictEqual(posted.at(-1)?.type, "empty");
+    send(null);
+    // The action name is untrusted: inherited keys and unknown names do nothing.
+    const count = posted.length;
+    send({ type: "toolbar", action: "constructor" });
+    send({ type: "toolbar", action: "rm -rf" });
+    assert.strictEqual(posted.length, count);
+
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
+    const titleMenu = ext?.packageJSON.contributes.menus["view/title"] as {
+      when: string;
+    }[];
+    assert.ok(
+      titleMenu.every((item) => !item.when.includes("pdp.graph")),
+      "graph actions are back on the title bar",
+    );
     provider.dispose();
   });
 
@@ -472,6 +775,29 @@ suite("graph", () => {
       first.positions,
       "refresh moved the nodes",
     );
+  }).timeout(20000);
+
+  test("the automatic layout spreads a diamond-shaped graph without stacking boxes", async () => {
+    assert.ok(graphView, "graph view not registered");
+    const before = graphView.lastAck;
+    await graphView.chooseLayout("top-down");
+    const cleared = await acked(graphView, before);
+    graphView.update(
+      statusOf([
+        ["d-import", []],
+        ["d-clean", ["d-import"]],
+        ["d-filter", ["d-clean"]],
+        ["d-explore", ["d-clean"]],
+        ["d-model", ["d-filter"]],
+        ["d-report", ["d-filter", "d-explore", "d-model"]],
+      ]),
+    );
+    const ack = await acked(graphView, cleared);
+    assert.strictEqual(ack.preset, false);
+    const spots = new Set(
+      Object.values(ack.positions).map((p) => JSON.stringify(p)),
+    );
+    assert.strictEqual(spots.size, 6, "boxes share a position");
   }).timeout(20000);
 
   test("top-down packs siblings and tiers close, and a new task joins without moving the rest", async () => {

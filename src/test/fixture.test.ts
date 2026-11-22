@@ -4,6 +4,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as pdp from "../pdp";
 import { parseFreshen } from "../pdp";
+import { tasksTree } from "../extension";
 import { FileItem, PdpTasksProvider, TaskItem } from "../tasksView";
 
 // Runs against the real pdp binary in src/test/fixtures/demo, which the
@@ -183,5 +184,222 @@ suite("fixture integration", () => {
       before,
       "no task document should have opened",
     );
+  });
+
+  test("package.json carries the tasks view keybindings exactly", async () => {
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
+    assert.ok(ext, "extension not found");
+    const bindings = ext.packageJSON.contributes.keybindings as {
+      command: string;
+      key: string;
+      when: string;
+      args?: unknown;
+    }[];
+    for (const [key, command] of [
+      ["r", "pdp.runTaskConfirm"],
+      ["c", "pdp.cleanTaskConfirm"],
+      ["t", "pdp.runToConfirm"],
+      ["f", "pdp.freshenTask"],
+      ["d", "pdp.deleteTask"],
+      ["s", "pdp.openTaskSrc"],
+      ["o", "pdp.revealTaskOutput"],
+    ]) {
+      const binding = bindings.find((b) => b.command === command);
+      assert.ok(binding, `no keybinding for ${command}`);
+      assert.strictEqual(binding.key, key, `${command} key`);
+      assert.strictEqual(
+        binding.when,
+        "focusedView == pdp.tasks && !terminalFocus",
+        `${command} when`,
+      );
+      assert.deepStrictEqual(binding.args, { selected: true }, command);
+    }
+  });
+
+  test("the tree selection backs the selected:true argument shape", async () => {
+    await pdp.spawnPdp(["run", "--to", "clean"]).done;
+    await vscode.commands.executeCommand("pdp.refresh");
+    assert.ok(tasksTree, "tasks tree not registered");
+    const provider = new PdpTasksProvider();
+    provider.update(await pdp.status());
+    const items = (await provider.getChildren()).filter(
+      (item) => item instanceof TaskItem,
+    );
+    await tasksTree!.reveal(items[0], { select: true });
+
+    const originalExecute = vscode.commands.executeCommand;
+    const revealed: unknown[][] = [];
+    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+      if (command === "revealInExplorer") {
+        revealed.push(args);
+        return Promise.resolve(undefined);
+      }
+      return originalExecute(command, ...args);
+    }) as typeof vscode.commands.executeCommand;
+    try {
+      await vscode.commands.executeCommand("pdp.revealTaskOutput", {
+        selected: true,
+      });
+    } finally {
+      vscode.commands.executeCommand = originalExecute;
+    }
+    assert.strictEqual(revealed.length, 1, "nothing was revealed");
+    assert.match(
+      String((revealed[0][0] as vscode.Uri).fsPath),
+      /import[/\\]output$/,
+    );
+  });
+
+  test("openTaskSrc handles zero, one and many source files", async () => {
+    await vscode.commands.executeCommand("pdp.refresh");
+    const src = path.join(pdp.workspaceRoot()!, "import", "src");
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 300)); // let the watcher see the files
+    const write = (...names: string[]) => {
+      fs.mkdirSync(src, { recursive: true });
+      for (const name of names) {
+        fs.writeFileSync(path.join(src, name), "x = 1\n");
+      }
+    };
+
+    const originalInfo = vscode.window.showInformationMessage;
+    const originalPick = vscode.window.showQuickPick;
+    try {
+      fs.rmSync(src, { recursive: true, force: true });
+      await settle();
+      const infos: string[] = [];
+      vscode.window.showInformationMessage = ((
+        message: string,
+        ...rest: unknown[]
+      ) => {
+        infos.push(message);
+        return Promise.resolve(undefined);
+      }) as typeof vscode.window.showInformationMessage;
+      await vscode.commands.executeCommand("pdp.openTaskSrc", "import");
+      assert.deepStrictEqual(infos, ["PDP: No files in import/src"]);
+
+      infos.length = 0;
+      write("a.py");
+      await settle();
+      await vscode.commands.executeCommand("pdp.openTaskSrc", "import");
+      assert.deepStrictEqual(infos, []);
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /import[/\\]src[/\\]a\.py$/,
+      );
+
+      write("b.py");
+      await settle();
+      // The QuickPick returns its second item, so b.py must open.
+      vscode.window.showQuickPick = (async (items: readonly unknown[]) =>
+        (
+          items as { uri: vscode.Uri }[]
+        )[1]) as unknown as typeof vscode.window.showQuickPick;
+      await vscode.commands.executeCommand("pdp.openTaskSrc", "import");
+      assert.match(
+        vscode.window.activeTextEditor?.document.uri.fsPath ?? "",
+        /import[/\\]src[/\\]b\.py$/,
+      );
+    } finally {
+      vscode.window.showInformationMessage = originalInfo;
+      vscode.window.showQuickPick = originalPick;
+      fs.rmSync(src, { recursive: true, force: true });
+      fs.mkdirSync(src, { recursive: true });
+    }
+  });
+
+  test("confirm commands run the target only when the modal says yes", async () => {
+    await vscode.commands.executeCommand("pdp.refresh");
+    const originalWarn = vscode.window.showWarningMessage;
+    const originalExecute = vscode.commands.executeCommand;
+    const ran: unknown[][] = [];
+    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+      if (command === "pdp.runTask") {
+        ran.push(args);
+        return Promise.resolve(undefined);
+      }
+      return originalExecute(command, ...args);
+    }) as typeof vscode.commands.executeCommand;
+    try {
+      vscode.window.showWarningMessage = (async () =>
+        undefined) as typeof vscode.window.showWarningMessage;
+      await vscode.commands.executeCommand("pdp.runTaskConfirm", "import");
+      assert.deepStrictEqual(ran, [], "dismissed modal still ran the task");
+
+      vscode.window.showWarningMessage = (async () =>
+        "Run") as typeof vscode.window.showWarningMessage;
+      await vscode.commands.executeCommand("pdp.runTaskConfirm", "import");
+      assert.deepStrictEqual(ran, [["import"]]);
+    } finally {
+      vscode.window.showWarningMessage = originalWarn;
+      vscode.commands.executeCommand = originalExecute;
+    }
+  });
+
+  test("showShortcuts with 'tasks' lists the tasks keys only", async () => {
+    await vscode.commands.executeCommand("pdp.refresh");
+    type ShortcutItem = { label: string; description?: string };
+    let items: ShortcutItem[] = [];
+    const originalPick = vscode.window.showQuickPick;
+    const originalExecute = vscode.commands.executeCommand;
+    const ran: { command: string; args: unknown[] }[] = [];
+    vscode.window.showQuickPick = (async (list: readonly unknown[]) => {
+      items = list as ShortcutItem[];
+      return items[1];
+    }) as unknown as typeof vscode.window.showQuickPick;
+    vscode.commands.executeCommand = ((command: string, ...args: unknown[]) => {
+      if (command.startsWith("pdp.") && command !== "pdp.showShortcuts") {
+        ran.push({ command, args });
+        return Promise.resolve(undefined);
+      }
+      return originalExecute(command, ...args);
+    }) as typeof vscode.commands.executeCommand;
+    try {
+      await vscode.commands.executeCommand("pdp.showShortcuts", "tasks");
+    } finally {
+      vscode.window.showQuickPick = originalPick;
+      vscode.commands.executeCommand = originalExecute;
+    }
+    const keys = items.map((item) => String(item.label));
+    for (const key of ["Enter", "r", "c", "t", "f", "d", "s", "o"]) {
+      assert.ok(keys.includes(key), `missing tasks key ${key}`);
+    }
+    for (const graphKey of ["i", "l"]) {
+      assert.ok(!keys.includes(graphKey), `graph key ${graphKey} leaked in`);
+    }
+    // Picking the r entry runs its command against the tree selection.
+    assert.deepStrictEqual(ran, [
+      { command: "pdp.runTaskConfirm", args: [{ selected: true }] },
+    ]);
+  });
+
+  test("package.json binds ? to the cheat sheet in each view", async () => {
+    const ext = vscode.extensions.getExtension(
+      "scienceandhumanitylab.pdp-vscode",
+    );
+    const bindings = ext?.packageJSON.contributes.keybindings as {
+      command: string;
+      key: string;
+      when: string;
+      args?: unknown;
+    }[];
+    const show = bindings.filter(
+      (binding) => binding.command === "pdp.showShortcuts",
+    );
+    assert.deepStrictEqual(show, [
+      {
+        command: "pdp.showShortcuts",
+        key: "shift+/",
+        when: "pdp.graphFocused && !terminalFocus",
+        args: "graph",
+      },
+      {
+        command: "pdp.showShortcuts",
+        key: "shift+/",
+        when: "focusedView == pdp.tasks && !terminalFocus",
+        args: "tasks",
+      },
+    ]);
   });
 });

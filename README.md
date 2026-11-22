@@ -115,12 +115,13 @@ so they never fight the shell. Rebind them under **Keyboard Shortcuts** if
 
 The **Graph view** sits under Tasks in the PDP sidebar and draws the task DAG on
 an interactive canvas. Drag nodes to arrange them and drag the background to
-pan. Scroll to zoom (up to 150%), or use the title-bar zoom buttons. Your
-arrangement and view are remembered per project and survive runs and refreshes —
-only adding a task re-lays-out once. The title bar also has a layout picker —
-top-down, left-right or force-directed. Picking one re-lays the graph out and
-becomes the project's automatic layout — and **Reset Graph Layout**, which
-clears your arrangement back to that automatic layout. Nodes are labelled
+pan. Scroll to zoom (up to 150%), or use the toolbar in the graph's top-right
+corner. Your arrangement and view are remembered per project and survive runs
+and refreshes; a newly added task is placed next to its neighbours without
+moving the rest. The toolbar's **Layout** picks top-down, left-right or
+force-directed and re-lays the graph out. **Save** keeps your arrangement as the
+default, and **Reset** returns to it (or, with nothing saved, to the automatic
+layout). Every toolbar action is also in the command palette. Nodes are labelled
 `task ✗` / `task ✓` and coloured stale/fresh and follow your colour theme. Hover
 a node for its full state. Click a node to open that task's `task.yml`.
 Right-click it for the task menu (run variants, Freshen, Clean, Open task.yml,

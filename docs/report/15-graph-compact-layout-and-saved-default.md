@@ -5,24 +5,27 @@
 User request: pack the graph's boxes closer and fill the sidebar better (narrow
 and tall), let users save their manual arrangement as the default Reset returns
 to, and add new tasks without re-laying out the whole graph. Plan-mode
-decisions: choosing a layout drops the saved default; the default lives in
-`workspaceState` (no new ADR, it extends ADR 0005's storage).
+decisions: choosing a layout keeps the saved default (first decided as drop;
+reversed after the user tried it, so Reset returns to their save); the default
+lives in `workspaceState` (no new ADR, it extends ADR 0005's storage).
 
 - **Compact tiered layouts** (`layoutOptions`, webview): breadthfirst runs with
   a collapsed `boundingBox`, `avoidOverlap` and `spacingFactor: 1`, so every
   step is the largest box side; `transform` rescales each axis to widest/tallest
   box plus `GAP_ACROSS` (12 px) / `GAP_DOWN` (40 px). The old default
   `spacingFactor` 1.75 and sidebar-sized box were what spread the graph.
-  `maximal: true` pushes each task to the tier below its deepest upstream, so
-  edges point down one tier where possible. `fit()` then fills the sidebar
-  width, still capped by `maxZoom`.
+  `maximal` is deliberately off: in cytoscape 3.35 it throws when a node leaves
+  a tier that still holds others, which left every box stacked at the origin
+  (caught by the user after the first commit; `acyclic` takes the same path).
+  `fit()` then fills the sidebar width, still capped by `maxZoom`.
 - **Saved default**: `pdp.saveGraphLayout` ("PDP: Save Graph Layout as Default",
   `$(save)`, title bar `navigation@4`, palette). The host posts `saveDefault`;
   the webview cancels its pending debounced save and answers with its
   `positions` message flagged `asDefault`, so an untouched automatic layout or a
   just-made zoom is captured. Stored as `GraphLayout.saved` (`positions`,
   `viewport`). `resetLayout` restores it, else clears to the chosen automatic
-  layout. `chooseLayout` drops it. A status-bar message confirms the save.
+  layout. `chooseLayout` clears the current positions and viewport but keeps
+  `saved`. A status-bar message confirms the save.
 - **New tasks join in place**: the host now renders `preset` when _any_ task has
   a saved position (was: all). `placeNew` (webview) puts each unplaced task one
   tier past its placed upstream tasks, else one before its downstream ones,
@@ -36,15 +39,19 @@ decisions: choosing a layout drops the saved default; the default lives in
 
 ## Tests added
 
-- `a saved default survives drags, reset restores it, and choosing a layout drops it`
+- `a saved default survives drags, reset restores it, even after choosing a layout`
   (host, stub memento): save-default round trip with a ghost id dropped; a later
   drag (with an unrequested `asDefault`) leaves `saved` untouched; reset renders
   the saved positions and viewport as preset; junk in a persisted default is
-  dropped; `chooseLayout` clears it.
+  dropped; `chooseLayout` keeps it and Reset then restores it (red before the
+  fix).
 - `top-down packs siblings and tiers close, and a new task joins without moving the rest`
   (real webview): sibling spacing 40–100 px, tier spacing 30–100 px; adding
   `tail` under `leaf1` keeps all four existing positions, places `tail` directly
   below `leaf1`, and the placement survives the next refresh.
+- `the automatic layout spreads a diamond-shaped graph without stacking boxes`
+  (real webview, the demo fixture's shape): red with `maximal: true` (the layout
+  threw and never acked), green without it.
 - Updated: a partly saved arrangement is now a preset render.
 
 Red → green: the host test failed to compile (`saveDefault` missing); the layout
@@ -72,7 +79,7 @@ Fresh-context subagent review; no blocking issues. Fixed:
 Accepted:
 
 - Once a default is saved, Reset no longer reaches the automatic layout; Choose
-  Layout does (and drops the default). This was the user's decision.
+  Layout does, keeping the default for Reset. This was the user's decision.
 - In the force layout, new tasks are placed with the tier rules (top-down axes).
   Good enough for one task; Choose Layout re-runs force.
 - The 700 ms wait for the debounced save in the end-to-end tests stays, as in
@@ -95,7 +102,42 @@ marker.
 
 ## Deferred
 
-- No separate "Clear saved default" command (Choose Layout covers it).
+- No "Clear saved default" command (user: not needed; saving again replaces it).
 - Force layout spacing unchanged; cose's defaults were already compact and the
   spread came from `fit()`.
 - Placement does not avoid edge crossings.
+- Without `maximal`, a task whose upstreams sit at different depths can share a
+  tier with one of them (the demo's `model → report` edge runs sideways).
+  Revisit if cytoscape fixes the `maximal` crash.
+
+## Follow-up: graph toolbar inside the webview
+
+Clicking the Graph view's title-bar buttons often collapsed the view. The
+command palette never did, nor did the Tasks view's buttons, and
+`workbench.view.alwaysShowHeaderActions` did not help. A capture listener in the
+Extension Development Host's devtools showed the press landing on `pane-header`,
+which VS Code toggles on click. The extension cannot change that header, so the
+five graph actions moved out of `view/title` into a toolbar above the canvas
+(zoom in/out, Layout, Save, Reset). The commands stay in the palette.
+
+- Webview: plain `<button>`s with `aria-label` and `title`, Tab-reachable, in a
+  `role="group"`; colours are `--vscode-button-secondary*`,
+  `--vscode-contrastBorder` and `--vscode-focusBorder`. The toolbar sits in
+  normal flow above `#graph`, so it never covers nodes; it is hidden in the
+  empty state. The hover tip now offsets by the canvas's top.
+- Host: `{type: "toolbar", action}` maps through an own-property allowlist
+  (`Object.hasOwn`), so unknown or inherited names do nothing. Non-object
+  webview messages are now ignored before any field is read.
+- Test:
+  `the in-graph toolbar replaces the title-bar buttons, which collapsed the view`
+  checks each button's `data-action`/label pair, zoom in/out and reset dispatch,
+  that junk actions and `null` messages do nothing, and that `package.json` has
+  no `pdp.graph` title-bar entries. Red first (no buttons), then green;
+  `pnpm test` 42 passing.
+- Review (fresh subagent), all fixed: stale CHANGELOG and code comment; the
+  absolutely positioned toolbar could cover nodes and the hover tip (now in
+  flow); `role="toolbar"` promised arrow-key navigation (now `group`); thin test
+  coverage; unchecked `null` messages.
+- Contrast: theme button tokens only, which VS Code's built-in themes set to
+  meet AA; in high-contrast the border comes from `contrastBorder`. Checked by
+  reading the tokens, not measured in a running window.
