@@ -270,7 +270,7 @@ function html(webview: vscode.Webview, nonce: string, scriptUri: string) {
   <button type="button" data-action="save" aria-label="Save layout as default (S)" title="Save layout as default (S)" aria-keyshortcuts="s">Save</button>
   <button type="button" data-action="reset" aria-label="Reset layout (R)" title="Reset layout (R)" aria-keyshortcuts="r">Reset</button>
 </div>
-<div id="graph" role="img" aria-label="PDP task graph"></div>
+<div id="graph" role="img" aria-label="pdp task graph"></div>
 <div id="layoutMenu" role="menu" aria-label="Graph layout" hidden></div>
 <script src="${scriptUri}"></script>
 <script type="module" nonce="${nonce}">
@@ -956,7 +956,7 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
     } else {
       this.pushEmpty(
         this.status
-          ? "No tasks in this project yet. Create one with PDP: Create Task."
+          ? "No tasks in this project yet. Create one with pdp: Create Task."
           : "No pdp project in this workspace. Open a workspace with a pdp.yml, then refresh.",
       );
     }
@@ -1009,7 +1009,7 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
       }
       void this.storage.update(positionsKey(root), layout);
       if (asDefault) {
-        vscode.window.setStatusBarMessage("PDP: Layout saved as default", 4000);
+        vscode.window.setStatusBarMessage("pdp: Layout saved as default", 4000);
       }
     }
   }
@@ -1019,7 +1019,7 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
   saveDefault(): void {
     if (!this.view || !this.status?.tasks.length) {
       void vscode.window.showInformationMessage(
-        "PDP: Open the Graph view with tasks shown to save its layout.",
+        "pdp: Open the Graph view with tasks shown to save its layout.",
       );
       return;
     }
@@ -1049,8 +1049,8 @@ export class PdpGraphViewProvider implements vscode.WebviewViewProvider {
       GRAPH_LAYOUTS[0].label;
     vscode.window.setStatusBarMessage(
       current.saved
-        ? "PDP: Layout reset to saved default"
-        : `PDP: Layout reset to ${label}`,
+        ? "pdp: Layout reset to saved default"
+        : `pdp: Layout reset to ${label}`,
       4000,
     );
     this.pushStatus();

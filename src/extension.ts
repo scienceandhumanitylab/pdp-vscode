@@ -53,7 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ...createWatchers(),
   );
   statusBar.command = "pdp.runAll";
-  statusBar.name = "PDP stale count";
+  statusBar.name = "pdp stale count";
   void checkVersion();
   void refresh();
 }
@@ -148,7 +148,7 @@ async function doRefresh(
     tasksProvider.update(status, running);
     graphView?.update(status, running);
     const stale = status.tasks.filter((task) => task.stale).length;
-    statusBar.text = `$(play) PDP: ${stale} stale`;
+    statusBar.text = `$(play) pdp: ${stale} stale`;
     statusBar.tooltip = `${stale} of ${status.tasks.length} tasks are stale. Click to run the stale tasks.`;
     statusBar.backgroundColor = undefined;
     statusBar.show();
@@ -158,7 +158,7 @@ async function doRefresh(
   } catch (err) {
     // Keep the last good status on screen; an emptied sidebar looks unrecoverable.
     const message = (err as Error).message;
-    statusBar.text = "$(error) PDP";
+    statusBar.text = "$(error) pdp";
     statusBar.tooltip = message;
     statusBar.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground",
@@ -179,11 +179,11 @@ function registerCommands(): vscode.Disposable[] {
   return [
     register("pdp.refresh", () => refresh(true)),
 
-    register("pdp.runAll", () => runWithProgress([], "PDP: Run all")),
+    register("pdp.runAll", () => runWithProgress([], "pdp: Run all")),
     register("pdp.rerunLast", rerunLast),
     register("pdp.runPick", runPick),
     register("pdp.runTask", (arg) =>
-      withTask(arg, (id) => runWithProgress([id], `PDP: Run ${id}`)),
+      withTask(arg, (id) => runWithProgress([id], `pdp: Run ${id}`)),
     ),
     register("pdp.runTaskConfirm", (arg) =>
       confirmThen(
@@ -195,25 +195,25 @@ function registerCommands(): vscode.Disposable[] {
     ),
     register("pdp.runOnly", (arg) =>
       withTask(arg, (id) =>
-        runWithProgress([id, "--only"], `PDP: Run only ${id}`),
+        runWithProgress([id, "--only"], `pdp: Run only ${id}`),
       ),
     ),
     register("pdp.runTo", (arg) =>
-      withTask(arg, (id) => runWithProgress(["--to", id], `PDP: Run to ${id}`)),
+      withTask(arg, (id) => runWithProgress(["--to", id], `pdp: Run to ${id}`)),
     ),
     register("pdp.runFrom", (arg) =>
       withTask(arg, (id) =>
-        runWithProgress(["--from", id], `PDP: Run from ${id}`),
+        runWithProgress(["--from", id], `pdp: Run from ${id}`),
       ),
     ),
     register("pdp.runForce", (arg) =>
       withTask(arg, (id) =>
-        runWithProgress([id, "--force"], `PDP: Force run ${id}`),
+        runWithProgress([id, "--force"], `pdp: Force run ${id}`),
       ),
     ),
     register("pdp.runSlurm", (arg) =>
       withTask(arg, (id) =>
-        runWithProgress([id, "--slurm"], `PDP: Run ${id} on Slurm`),
+        runWithProgress([id, "--slurm"], `pdp: Run ${id} on Slurm`),
       ),
     ),
 
@@ -225,7 +225,7 @@ function registerCommands(): vscode.Disposable[] {
     ),
 
     register("pdp.cleanTask", (arg) =>
-      withTask(arg, (id) => execSimple(["clean", id], `PDP: Cleaned ${id}`)),
+      withTask(arg, (id) => execSimple(["clean", id], `pdp: Cleaned ${id}`)),
     ),
     register("pdp.cleanTaskConfirm", (arg) =>
       confirmThen(
@@ -236,9 +236,9 @@ function registerCommands(): vscode.Disposable[] {
       ),
     ),
     register("pdp.deleteTask", (arg) => withTask(arg, deleteTask)),
-    register("pdp.cleanAll", () => execSimple(["clean"], "PDP: Cleaned all")),
+    register("pdp.cleanAll", () => execSimple(["clean"], "pdp: Cleaned all")),
     register("pdp.validate", validateProject),
-    register("pdp.scaffold", () => execSimple(["scaffold"], "PDP: Scaffolded")),
+    register("pdp.scaffold", () => execSimple(["scaffold"], "pdp: Scaffolded")),
     register("pdp.init", initProject),
     register("pdp.create", createTask),
 
@@ -279,21 +279,21 @@ function registerCommands(): vscode.Disposable[] {
     ),
     register("pdp.remoteRefresh", () => refreshRemote()),
     register("pdp.remoteRunAll", () =>
-      remoteCommand(["remote", "run"], "PDP: Remote run all", true),
+      remoteCommand(["remote", "run"], "pdp: Remote run all", true),
     ),
     register("pdp.remoteRunTask", (arg) =>
       withTask(arg, (id) =>
-        remoteCommand(["remote", "run", id], `PDP: Remote run ${id}`, true),
+        remoteCommand(["remote", "run", id], `pdp: Remote run ${id}`, true),
       ),
     ),
     register("pdp.remotePush", () =>
-      remoteCommand(["remote", "push"], "PDP: Remote push", false),
+      remoteCommand(["remote", "push"], "pdp: Remote push", false),
     ),
     register("pdp.remotePull", () =>
-      remoteCommand(["remote", "pull"], "PDP: Remote pull", false),
+      remoteCommand(["remote", "pull"], "pdp: Remote pull", false),
     ),
     register("pdp.remoteStop", () =>
-      remoteCommand(["remote", "stop"], "PDP: Remote stop", false).then(() =>
+      remoteCommand(["remote", "stop"], "pdp: Remote stop", false).then(() =>
         processes.stop("remote-tunnel"),
       ),
     ),
@@ -345,7 +345,7 @@ async function processFromArgOrPick(
   }
   const list = processes.list();
   if (!list.length) {
-    vscode.window.showInformationMessage("PDP: No background processes");
+    vscode.window.showInformationMessage("pdp: No background processes");
     return undefined;
   }
   const picked = await vscode.window.showQuickPick(
@@ -368,7 +368,7 @@ async function initProject(): Promise<void> {
   if (name === undefined) {
     return;
   }
-  await execSimple(["init", "--name", name.trim()], `PDP: Init ${name.trim()}`);
+  await execSimple(["init", "--name", name.trim()], `pdp: Init ${name.trim()}`);
 }
 
 async function createTask(): Promise<void> {
@@ -381,7 +381,7 @@ async function createTask(): Promise<void> {
   if (id === undefined) {
     return;
   }
-  await execSimple(["create", id.trim()], `PDP: Created ${id.trim()}`);
+  await execSimple(["create", id.trim()], `pdp: Created ${id.trim()}`);
 }
 
 async function execSimple(args: string[], success: string): Promise<void> {
@@ -512,7 +512,7 @@ function notifyRunResult(title: string, result: RunResult): void {
 async function runPick(): Promise<void> {
   const tasks = lastStatus?.tasks ?? (await refresh(), lastStatus?.tasks);
   if (!tasks?.length) {
-    vscode.window.showInformationMessage("PDP: No tasks to run");
+    vscode.window.showInformationMessage("pdp: No tasks to run");
     return;
   }
   const picked = await vscode.window.showQuickPick(
@@ -552,7 +552,7 @@ async function runPick(): Promise<void> {
     ...picked.map((p) => p.task.id),
     ...(options ?? []).flatMap((o) => o.args),
   ];
-  await runWithProgress(args, "PDP: Run");
+  await runWithProgress(args, "pdp: Run");
 }
 
 // Task ids travel to pdp as bare argv words, so an id like "--force" in a
@@ -579,7 +579,7 @@ const TASK_MENU_ACTIONS = [
 async function taskMenu(id: string): Promise<void> {
   const picked = await vscode.window.showQuickPick(
     TASK_MENU_ACTIONS.map((action) => ({ ...action, description: id })),
-    { placeHolder: `PDP: ${id}` },
+    { placeHolder: `pdp: ${id}` },
   );
   if (picked) {
     await vscode.commands.executeCommand(picked.command, id);
@@ -665,7 +665,7 @@ async function showShortcuts(arg: unknown): Promise<void> {
     selected: false,
   });
   const picked = await vscode.window.showQuickPick(items, {
-    placeHolder: "PDP: Keyboard shortcuts",
+    placeHolder: "pdp: Keyboard shortcuts",
   });
   if (!picked) {
     return;
@@ -696,7 +696,7 @@ async function chooseGraphLayout(): Promise<void> {
 async function rerunLast(): Promise<void> {
   const last = lastRunTracker.lastRun;
   if (!last) {
-    vscode.window.showInformationMessage("PDP: No run yet this session");
+    vscode.window.showInformationMessage("pdp: No run yet this session");
     return;
   }
   await runWithProgress(last.args, last.title);
@@ -736,7 +736,7 @@ async function taskFromArgOrPick(
   // it against the last status so nothing unknown or forged reaches pdp.
   if (typeof arg === "string") {
     if (!TASK_ID_PATTERN.test(arg)) {
-      vscode.window.showWarningMessage(`PDP: Invalid task id "${arg}"`);
+      vscode.window.showWarningMessage(`pdp: Invalid task id "${arg}"`);
       return undefined;
     }
     if (!lastStatus) {
@@ -744,7 +744,7 @@ async function taskFromArgOrPick(
     }
     const task = lastStatus?.tasks.find((candidate) => candidate.id === arg);
     if (!task) {
-      vscode.window.showWarningMessage(`PDP: Unknown task "${arg}"`);
+      vscode.window.showWarningMessage(`pdp: Unknown task "${arg}"`);
     }
     return task;
   }
@@ -765,7 +765,7 @@ async function taskFromArgOrPick(
   }
   const list = lastStatus?.tasks ?? [];
   if (!list.length) {
-    vscode.window.showInformationMessage("PDP: No tasks found");
+    vscode.window.showInformationMessage("pdp: No tasks found");
     return undefined;
   }
   // The tree's context row: a task, or a file row inside one.
@@ -807,7 +807,7 @@ function taskFolder(id: string): string | undefined {
   }
   const folder = taskFolderPath(root, id);
   if (!folder) {
-    vscode.window.showWarningMessage(`PDP: Invalid task id "${id}"`);
+    vscode.window.showWarningMessage(`pdp: Invalid task id "${id}"`);
   }
   return folder;
 }
@@ -865,7 +865,7 @@ function notifyFreshenResult(report: pdp.FreshenReport): void {
   }
   const summary = parts.join(" · ") || "nothing to freshen";
   if (report.newlyStale.length) {
-    const message = `PDP: ${summary} — freshening made ${report.newlyStale.join(", ")} stale`;
+    const message = `pdp: ${summary} — freshening made ${report.newlyStale.join(", ")} stale`;
     // The follow-up id comes from parsed pdp output, so it passes the same
     // gate as dispatched task ids; and without a freshened task, --from
     // would refuse on the still-stale upstream anyway.
@@ -882,9 +882,9 @@ function notifyFreshenResult(report: pdp.FreshenReport): void {
       vscode.window.showWarningMessage(message);
     }
   } else if (report.stillStale.length) {
-    vscode.window.showWarningMessage(`PDP: ${summary}`);
+    vscode.window.showWarningMessage(`pdp: ${summary}`);
   } else {
-    vscode.window.showInformationMessage(`PDP: ${summary}`);
+    vscode.window.showInformationMessage(`pdp: ${summary}`);
   }
 }
 
@@ -903,10 +903,10 @@ async function validateProject(): Promise<void> {
       .map((line) => line.slice("Warning: ".length));
     if (warnings.length) {
       vscode.window.showWarningMessage(
-        `PDP: Valid with warnings — ${warnings.join("; ")}`,
+        `pdp: Valid with warnings — ${warnings.join("; ")}`,
       );
     } else {
-      vscode.window.showInformationMessage("PDP: Valid project");
+      vscode.window.showInformationMessage("pdp: Valid project");
     }
   } catch (err) {
     await refresh();
@@ -933,7 +933,7 @@ async function deleteTask(id: string): Promise<void> {
   // The folder vanishes before pdp.yml is rewritten; don't let a watcher
   // refresh in between offer to "clean up" the task being deleted.
   dismissedMissing.add(id);
-  await execSimple(["delete", id, "--yes"], `PDP: Deleted ${id}`);
+  await execSimple(["delete", id, "--yes"], `pdp: Deleted ${id}`);
   if (fs.existsSync(folder)) {
     dismissedMissing.delete(id); // refused or failed: a later manual delete prompts
   }
@@ -968,7 +968,7 @@ async function promptMissingFolders(status: pdp.ProjectStatus): Promise<void> {
       "Remove",
     );
     if (choice === "Scaffold") {
-      await execSimple(["scaffold"], "PDP: Scaffolded");
+      await execSimple(["scaffold"], "pdp: Scaffolded");
       return;
     }
     if (choice !== "Remove") {
@@ -990,7 +990,7 @@ async function promptMissingFolders(status: pdp.ProjectStatus): Promise<void> {
       await showError(errors.join("\n"));
     } else if (toRemove.length) {
       vscode.window.showInformationMessage(
-        `PDP: Removed ${toRemove.join(", ")}`,
+        `pdp: Removed ${toRemove.join(", ")}`,
       );
     }
   } finally {
@@ -1025,7 +1025,7 @@ async function openTaskYml(id: string): Promise<void> {
   }
   const uri = vscode.Uri.file(path.join(folder, "task.yml"));
   if (!fs.existsSync(uri.fsPath)) {
-    vscode.window.showWarningMessage(`PDP: No task.yml for ${id}`);
+    vscode.window.showWarningMessage(`pdp: No task.yml for ${id}`);
     return;
   }
   const document = await vscode.workspace.openTextDocument(uri);
@@ -1054,7 +1054,7 @@ async function openTaskSrc(id: string): Promise<void> {
   );
   if (uris.length === 0) {
     const choice = await vscode.window.showInformationMessage(
-      `PDP: No files in ${id}/src`,
+      `pdp: No files in ${id}/src`,
       "Reveal Folder",
     );
     if (choice === "Reveal Folder") {
@@ -1088,7 +1088,7 @@ async function openTaskMakefile(id: string): Promise<void> {
   }
   const uri = vscode.Uri.file(path.join(folder, "Makefile"));
   if (!fs.existsSync(uri.fsPath)) {
-    vscode.window.showInformationMessage(`PDP: No Makefile for ${id}`);
+    vscode.window.showInformationMessage(`pdp: No Makefile for ${id}`);
     return;
   }
   await vscode.window.showTextDocument(
@@ -1107,12 +1107,12 @@ async function createTaskFile(
   open: (id: string) => Promise<void>,
 ): Promise<void> {
   if (!TASK_ID_PATTERN.test(id)) {
-    vscode.window.showWarningMessage(`PDP: Invalid task id "${id}"`);
+    vscode.window.showWarningMessage(`pdp: Invalid task id "${id}"`);
     return;
   }
   const folder = taskFolder(id);
   if (!folder || !fs.existsSync(folder)) {
-    vscode.window.showInformationMessage(`PDP: No folder for ${id}`);
+    vscode.window.showInformationMessage(`pdp: No folder for ${id}`);
     return;
   }
   const target = path.join(folder, file);
@@ -1159,7 +1159,7 @@ const SRC_STUB = `#!/bin/sh\nmkdir -p output\ntouch output/done.txt\n`;
 async function createTaskSrc(id: string): Promise<void> {
   const folder = taskFolder(id);
   if (!folder || !fs.existsSync(folder)) {
-    vscode.window.showInformationMessage(`PDP: No folder for ${id}`);
+    vscode.window.showInformationMessage(`pdp: No folder for ${id}`);
     return;
   }
   const src = path.join(folder, "src");
@@ -1204,7 +1204,7 @@ async function confirmAll(
 
 async function showError(message: string): Promise<void> {
   const choice = await vscode.window.showErrorMessage(
-    `PDP: ${message}`,
+    `pdp: ${message}`,
     "Show Output",
   );
   if (choice === "Show Output") {

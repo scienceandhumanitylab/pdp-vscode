@@ -35,7 +35,7 @@ export const MIN_PDP_VERSION = [0, 2, 5];
 export const UPGRADE_HINT =
   "Upgrade pdp with: uv tool upgrade pdp-helper (then reload the window)";
 
-export const channel = vscode.window.createOutputChannel("PDP");
+export const channel = vscode.window.createOutputChannel("pdp");
 
 export function pdpBinary(): string {
   return vscode.workspace.getConfiguration("pdp").get<string>("path") ?? "pdp";

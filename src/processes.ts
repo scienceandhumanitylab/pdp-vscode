@@ -62,7 +62,7 @@ export class ProcessRegistry implements ProcessSource {
 
   start(id: string, label: string, args: string[]): void {
     if (this.entries.has(id)) {
-      vscode.window.showInformationMessage(`PDP: ${label} is already running`);
+      vscode.window.showInformationMessage(`pdp: ${label} is already running`);
       return;
     }
     const meta: TrackedProcess = { id, label };
@@ -83,7 +83,7 @@ export class ProcessRegistry implements ProcessSource {
       .catch((err) => {
         this.remove(id, 1);
         void vscode.window.showErrorMessage(
-          `PDP: ${label}: ${(err as Error).message}`,
+          `pdp: ${label}: ${(err as Error).message}`,
         );
       });
   }
@@ -110,7 +110,7 @@ export class ProcessRegistry implements ProcessSource {
       void openUi(process.url, false);
     } else {
       vscode.window.showInformationMessage(
-        `PDP: ${process.label} has no UI URL yet`,
+        `pdp: ${process.label} has no UI URL yet`,
       );
     }
   }
@@ -121,14 +121,14 @@ export class ProcessRegistry implements ProcessSource {
     this.change.fire();
     if (code !== 0 && code !== 130) {
       vscode.window.showErrorMessage(
-        `PDP: ${label} exited with code ${code}. See PDP output for details.`,
+        `pdp: ${label} exited with code ${code}. See pdp output for details.`,
       );
     }
   }
 
   private async announceUi(label: string, url: string): Promise<void> {
     const choice = await vscode.window.showInformationMessage(
-      `PDP: ${label} is ready at ${url}`,
+      `pdp: ${label} is ready at ${url}`,
       "Simple Browser",
       "External Browser",
     );

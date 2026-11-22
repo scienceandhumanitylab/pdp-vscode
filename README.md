@@ -24,44 +24,48 @@ using the terminal.
   uv tool upgrade pdp-helper
   ```
 
-## Settings
-
-| Setting             | Default | Meaning                                                |
-| ------------------- | ------- | ------------------------------------------------------ |
-| `pdp.path`          | `pdp`   | Path to the pdp binary, e.g. `/path/to/.venv/bin/pdp`  |
-| `pdp.dagsterPort`   | `3000`  | Port for the local Dagster UI started from the sidebar |
-| `pdp.graphFontSize` | `14`    | Font size (px) of the task graph node labels           |
-
 ## Commands
 
-Everything is in the command palette as **PDP: …**. The frequent ones are also
+Everything is in the command palette as **pdp: …**. The frequent ones are also
 buttons on the views.
 
-**Tasks view title:** Run all (stale) `▶`, Create task, Refresh, plus Run…,
-Scaffold, Validate, Init project and Clean all under `…`. Validate reports pdp's
-warnings (for example, a `depends_on` pattern matching no files), not just
-success.
+**Tasks view title** (`…` holds the rest):
 
-**On a task** (inline or right-click): Run, Clean, Run only this task, Run to
-here, Run from here, Force run, Run on Slurm, Freshen (downstream), Freshen
-only, Remote run, Open task.yml, Reveal task folder, Clean task, Delete task….
-**Run to here** runs the task and everything upstream of it, so it works even
-when an upstream task is stale — which **Run only this task** refuses.
-**Freshen** marks tasks fresh without running them (pdp sets their output file
-times to now — for a change you know doesn't affect results, like a comment). It
-asks first, and if it makes downstream tasks stale the notification offers
-**Freshen Downstream**. **Delete task…** asks first, then removes the task's
-folder and its `pdp.yml` entry (`pdp delete`, so it needs a pdp with that
-command). pdp refuses while another task depends on it.
+- **Run all (stale)** `▶`: runs every stale task.
+- **Run…**: pick tasks, then options (only, force, Slurm, runner).
+- **Create task**: adds a new task.
+- **Refresh**: reloads the tasks and graph.
+- **Scaffold**: creates any missing task folders.
+- **Validate**: checks `pdp.yml` and lists pdp's warnings.
+- **Init project**: creates a new pdp project.
+- **Clean all**: removes every task's output.
 
-**Run…** asks for tasks (multi-select) and then options (Only, Force, Slurm,
-runner).
+**On a task** (inline or right-click):
 
-**Remote & Processes view:** Start Dagster (local/Slurm), Remote start, Remote
-status (manual only — it SSHes), Remote run all / push / pull / stop.
+- **Run**: runs the task and everything upstream.
+- **Run only this task**: runs just this task; refuses if upstream is stale.
+- **Run to here**: same as Run (`pdp run --to`).
+- **Run from here**: runs the task and everything downstream.
+- **Force run**: runs the task even if it is fresh.
+- **Run on Slurm**: runs the task as a Slurm job.
+- **Remote run**: runs the task on the cluster.
+- **Freshen (downstream)**: marks the task and downstream fresh without running.
+- **Freshen only**: marks just this task fresh without running.
+- **Clean**: removes the task's output.
+- **Open task.yml**: opens the task's config.
+- **Reveal task folder**: shows the task's folder in the Explorer.
+- **Delete task…**: removes the task's folder and its `pdp.yml` entry.
 
-Runs show a progress notification with a **Cancel** button. Cancelling
-interrupts pdp _and_ its whole task tree (same as Ctrl-C in a terminal).
+**Remote & Processes view:**
+
+- **Start Dagster (local / Slurm)**: starts the Dagster UI.
+- **Remote start**: pushes, starts Dagster on the cluster and tunnels the UI.
+- **Remote status**: checks the cluster (manual only, it SSHes).
+- **Remote run all / push / pull / stop**: runs, syncs or stops the cluster
+  project.
+
+Freshen and Delete ask first. Runs show a progress notification with **Cancel**,
+which stops pdp and all its tasks.
 
 ### Keyboard shortcuts
 
@@ -71,54 +75,46 @@ so they never fight the shell. Rebind them under **Keyboard Shortcuts** if
 
 | Keys                 | Action                |
 | -------------------- | --------------------- |
-| `alt+p` then `p`     | Focus the Tasks view  |
+| `alt+p` then `p`/`t` | Focus the Tasks view  |
 | `alt+p` then `g`     | Focus the Graph view  |
 | `alt+p` then `r`     | Focus the Remote view |
 | `alt+p` then `space` | Run all stale tasks   |
+| `alt+p` then `.`     | Re-run the last run   |
 
-## The graph
+Single keys work while a view has focus. Press `?` in either view for a cheat
+sheet: pick an entry to run it, or **Customize…** to rebind.
 
-The **Graph view** sits under Tasks in the PDP sidebar and draws the task DAG on
-an interactive canvas. Drag nodes to arrange them and drag the background to
-pan. Scroll to zoom (up to 150%), or use the toolbar in the graph's top-right
-corner. Your arrangement and view are remembered per project and survive runs
-and refreshes; a newly added task is placed next to its neighbours without
-moving the rest. The toolbar's **Layout** picks top-down, left-right or
-force-directed and re-lays the graph out. **Save** keeps your arrangement as the
-default, and **Reset** returns to it (or, with nothing saved, to the automatic
-layout). Every toolbar action is also in the command palette. Nodes are labelled
-`task ✗` / `task ✓` and coloured stale/fresh and follow your colour theme;
-during a run the task being worked on shows `task ⟳` in yellow with a pulsing
-dashed border (still when your system asks for reduced motion). Hover a node for
-its full state. Click a node to open that task's `task.yml`. Right-click it for
-the task menu (run variants, Freshen, Clean, Open task.yml, Delete…).
+**Tasks view** (on the highlighted task):
 
-## Dagster and the cluster
+| Key             | Action                                       |
+| --------------- | -------------------------------------------- |
+| `t` / `Shift+T` | Open `task.yml` / create it if missing       |
+| `s` / `Shift+S` | Open the source file / create `src/main.sh`  |
+| `m` / `Shift+M` | Open the Makefile / create it if missing     |
+| `r` / `Shift+R` | Run the task / run all tasks (after confirm) |
+| `c` / `Shift+C` | Clean the task / clean all tasks (confirm)   |
+| `f`             | Freshen the task                             |
+| `d`             | Delete the task…                             |
+| `?`             | Cheat sheet                                  |
 
-- **PDP: Start Dagster (Local)** runs `pdp dagster dev` on `pdp.dagsterPort`.
-  When the UI is up you get a notification with **Simple Browser** / **External
-  Browser** buttons. The process shows in the Processes section with Open UI and
-  Stop buttons.
-- **Remote** commands need a `.env` in your project with at least:
+**Graph view:**
 
-  ```sh
-  PDP_REMOTE_HOST=cluster.example.edu
-  PDP_REMOTE_PATH=/home/me/my-project
-  PDP_REMOTE_PORT=3002
-  # optional, pins what gets installed on the cluster:
-  # PDP_REMOTE_SPEC="pdp-helper[dagster] @ git+https://github.com/scienceandhumanitylab/pdp@<sha>"
-  ```
+| Key                            | Action                 |
+| ------------------------------ | ---------------------- |
+| `i` / `o`                      | Zoom in / out          |
+| `l`                            | Choose layout          |
+| `s`                            | Save layout as default |
+| `r`                            | Reset layout           |
+| `Tab`, `Left`/`Right`, `j`/`k` | Cycle toolbar buttons  |
+| `?`                            | Cheat sheet            |
 
-  `PDP_REMOTE_SPEC` matters while features are unreleased: the cluster needs the
-  same pdp as your local install.
+## Settings
 
-- **PDP: Remote Start** pushes, starts Dagster on the cluster in tmux and
-  tunnels the UI. It keeps running as a tracked process. Stopping the tunnel
-  leaves the cluster session alive by design — **PDP: Remote Stop** ends the
-  sessions and cancels pdp's Slurm jobs.
-- The Remote section of the view shows host, project pushed, session, last run
-  (with exit code), whether the Dagster UI port is listening, and Slurm jobs (or
-  "unknown" if `squeue` failed).
+| Setting             | Default | Meaning                                                |
+| ------------------- | ------- | ------------------------------------------------------ |
+| `pdp.path`          | `pdp`   | Path to the pdp binary, e.g. `/path/to/.venv/bin/pdp`  |
+| `pdp.dagsterPort`   | `3000`  | Port for the local Dagster UI started from the sidebar |
+| `pdp.graphFontSize` | `14`    | Font size (px) of the task graph node labels           |
 
 ## Troubleshooting
 
@@ -126,7 +122,7 @@ the task menu (run variants, Freshen, Clean, Open task.yml, Delete…).
   0.2.5. Set `pdp.path` to an absolute binary path (e.g. a worktree's
   `.venv/bin/pdp`) and reload the window.
 - **Nothing in the sidebar** — the workspace root must contain `pdp.yml`.
-- **A command failed** — check **Output → PDP** for the full pdp output.
+- **A command failed** — check **Output → pdp** for the full pdp output.
 - **Edits to pdp itself** — if pdp is installed as an editable uv tool, Python
   edits are live immediately. Reinstall
   (`uv tool install --force --editable ".[dagster]"`) only when dependencies or
@@ -140,8 +136,7 @@ curl -fsSL https://get.pnpm.io | sh -
 
 # clone repo
 git clone https://github.com/scienceandhumanitylab/pdp-vscode.git
-cd pdp-vscode
-pnpm install
+cd pdp-vscode pnpm install
 ```
 
 - F5 or `Debug: Start Debugging` to launch development window. It opens with the
@@ -153,11 +148,35 @@ pnpm install
 ### Publishing
 
 Pushing a `v*` tag runs `.github/workflows/publish.yml`, which publishes to the
-Marketplace with Trusted Publishing. From a clean `main`:
+Marketplace with Trusted Publishing. Merging or pushing to `main` does not
+publish. The workflow refuses tags on commits that aren't on `main`.
 
-```sh
-pnpm version patch
-git push --follow-tags
-```
+1. **Prepare the release on your branch.** Bump the version first (pnpm needs a
+   clean tree), then rename `## [Unreleased]` in `CHANGELOG.md` to
+   `## [x.y.z] - YYYY-MM-DD`, and commit both:
 
-Marketplace will reject if not bumped.
+   ```sh
+   pnpm version patch --no-git-tag-version
+   # edit CHANGELOG.md
+   git commit -am "x.y.z"
+   git push
+   ```
+
+2. **Merge to `main`**, on GitHub or locally and push. Any merge method works.
+
+3. **Tag `main` to publish:**
+
+   ```sh
+   git switch main
+   git pull
+   git tag vx.y.z
+   git push origin vx.y.z
+   ```
+
+4. **Check the release** under the repo's Actions tab, then on the Marketplace
+   listing.
+
+5. **Start the next cycle.** Add a new empty `## [Unreleased]` section to
+   `CHANGELOG.md` on your branch.
+
+The Marketplace rejects a version that was already published, so always bump.

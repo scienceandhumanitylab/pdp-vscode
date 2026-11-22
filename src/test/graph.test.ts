@@ -797,7 +797,7 @@ suite("graph", () => {
       // Nothing saved and no layout chosen: reset announces top-down.
       await provider.resetLayout();
       assert.deepStrictEqual(bar.at(-1), [
-        "PDP: Layout reset to Top-down",
+        "pdp: Layout reset to Top-down",
         4000,
       ]);
 
@@ -805,7 +805,7 @@ suite("graph", () => {
       await provider.chooseLayout("left-right");
       await provider.resetLayout();
       assert.deepStrictEqual(bar.at(-1), [
-        "PDP: Layout reset to Left-right",
+        "pdp: Layout reset to Left-right",
         4000,
       ]);
 
@@ -823,12 +823,12 @@ suite("graph", () => {
         pan: { x: 0, y: 0 },
       });
       assert.deepStrictEqual(bar.at(-1), [
-        "PDP: Layout saved as default",
+        "pdp: Layout saved as default",
         4000,
       ]);
       await provider.resetLayout();
       assert.deepStrictEqual(bar.at(-1), [
-        "PDP: Layout reset to saved default",
+        "pdp: Layout reset to saved default",
         4000,
       ]);
     } finally {

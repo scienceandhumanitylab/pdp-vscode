@@ -326,7 +326,7 @@ suite("fixture integration", () => {
         return Promise.resolve(undefined);
       }) as typeof vscode.window.showInformationMessage;
       await vscode.commands.executeCommand("pdp.openTaskSrc", "import");
-      assert.deepStrictEqual(infos, ["PDP: No files in import/src"]);
+      assert.deepStrictEqual(infos, ["pdp: No files in import/src"]);
 
       infos.length = 0;
       write("a.py");
@@ -439,7 +439,7 @@ suite("fixture integration", () => {
 
       fs.rmSync(makefile);
       await vscode.commands.executeCommand("pdp.openTaskMakefile", "clean");
-      assert.deepStrictEqual(infos, ["PDP: No Makefile for clean"]);
+      assert.deepStrictEqual(infos, ["pdp: No Makefile for clean"]);
     } finally {
       fs.writeFileSync(makefile, "clean:\n\tbash src/main.sh\n");
       vscode.window.showInformationMessage = originalInfo;
@@ -673,13 +673,13 @@ suite("fixture integration", () => {
     };
     try {
       await vscode.commands.executeCommand("pdp.rerunLast");
-      assert.deepStrictEqual(infos, ["PDP: No run yet this session"]);
+      assert.deepStrictEqual(infos, ["pdp: No run yet this session"]);
       assert.deepStrictEqual(spawned, [], "a run happened without a record");
 
       await vscode.commands.executeCommand("pdp.runTask", "import");
       assert.deepStrictEqual(lastRunTracker.lastRun, {
         args: ["import"],
-        title: "PDP: Run import",
+        title: "pdp: Run import",
       });
       await vscode.commands.executeCommand("pdp.rerunLast");
       assert.deepStrictEqual(spawned, [

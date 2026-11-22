@@ -1,6 +1,6 @@
 {
   "name": "pdp-vscode",
-  "displayName": "PDP",
+  "displayName": "pdp",
   "description": "Principled Data Processing in VScode",
   "version": "0.0.5",
   "publisher": "scienceandhumanitylab",
@@ -23,207 +23,207 @@
     "commands": [
       {
         "command": "pdp.init",
-        "title": "PDP: Init Project",
+        "title": "pdp: Init Project",
         "icon": "$(add)"
       },
       {
         "command": "pdp.create",
-        "title": "PDP: Create Task",
+        "title": "pdp: Create Task",
         "icon": "$(add)"
       },
       {
         "command": "pdp.scaffold",
-        "title": "PDP: Scaffold"
+        "title": "pdp: Scaffold"
       },
       {
         "command": "pdp.validate",
-        "title": "PDP: Validate"
+        "title": "pdp: Validate"
       },
       {
         "command": "pdp.refresh",
-        "title": "PDP: Refresh",
+        "title": "pdp: Refresh",
         "icon": "$(refresh)"
       },
       {
         "command": "pdp.runAll",
-        "title": "PDP: Run All (Stale)",
+        "title": "pdp: Run All (Stale)",
         "icon": "$(play)"
       },
       {
         "command": "pdp.runPick",
-        "title": "PDP: Run…"
+        "title": "pdp: Run…"
       },
       {
         "command": "pdp.runTask",
-        "title": "PDP: Run Task",
+        "title": "pdp: Run Task",
         "icon": "$(play)"
       },
       {
         "command": "pdp.runOnly",
-        "title": "PDP: Run Only This Task"
+        "title": "pdp: Run Only This Task"
       },
       {
         "command": "pdp.runTo",
-        "title": "PDP: Run To Here"
+        "title": "pdp: Run To Here"
       },
       {
         "command": "pdp.runTaskConfirm",
-        "title": "PDP: Run Task (Confirm)"
+        "title": "pdp: Run Task (Confirm)"
       },
       {
         "command": "pdp.runFrom",
-        "title": "PDP: Run From Here"
+        "title": "pdp: Run From Here"
       },
       {
         "command": "pdp.runForce",
-        "title": "PDP: Force Run Task"
+        "title": "pdp: Force Run Task"
       },
       {
         "command": "pdp.runSlurm",
-        "title": "PDP: Run Task on Slurm"
+        "title": "pdp: Run Task on Slurm"
       },
       {
         "command": "pdp.freshenTask",
-        "title": "PDP: Freshen Task (and Downstream)"
+        "title": "pdp: Freshen Task (and Downstream)"
       },
       {
         "command": "pdp.freshenOnly",
-        "title": "PDP: Freshen Only This Task"
+        "title": "pdp: Freshen Only This Task"
       },
       {
         "command": "pdp.cleanTask",
-        "title": "PDP: Clean Task",
+        "title": "pdp: Clean Task",
         "icon": "$(trash)"
       },
       {
         "command": "pdp.cleanTaskConfirm",
-        "title": "PDP: Clean Task (Confirm)"
+        "title": "pdp: Clean Task (Confirm)"
       },
       {
         "command": "pdp.deleteTask",
-        "title": "PDP: Delete Task…"
+        "title": "pdp: Delete Task…"
       },
       {
         "command": "pdp.cleanAll",
-        "title": "PDP: Clean All",
+        "title": "pdp: Clean All",
         "icon": "$(trash)"
       },
       {
         "command": "pdp.openTask",
-        "title": "PDP: Open task.yml"
+        "title": "pdp: Open task.yml"
       },
       {
         "command": "pdp.createTaskYml",
-        "title": "PDP: Create Task task.yml"
+        "title": "pdp: Create Task task.yml"
       },
       {
         "command": "pdp.revealTask",
-        "title": "PDP: Reveal Task Folder"
+        "title": "pdp: Reveal Task Folder"
       },
       {
         "command": "pdp.openTaskSrc",
-        "title": "PDP: Open Task Source File"
+        "title": "pdp: Open Task Source File"
       },
       {
         "command": "pdp.createTaskSrc",
-        "title": "PDP: Create Task Source File"
+        "title": "pdp: Create Task Source File"
       },
       {
         "command": "pdp.openTaskMakefile",
-        "title": "PDP: Open Task Makefile"
+        "title": "pdp: Open Task Makefile"
       },
       {
         "command": "pdp.createTaskMakefile",
-        "title": "PDP: Create Task Makefile"
+        "title": "pdp: Create Task Makefile"
       },
       {
         "command": "pdp.runAllConfirm",
-        "title": "PDP: Run All (Confirm)"
+        "title": "pdp: Run All (Confirm)"
       },
       {
         "command": "pdp.cleanAllConfirm",
-        "title": "PDP: Clean All (Confirm)"
+        "title": "pdp: Clean All (Confirm)"
       },
       {
         "command": "pdp.resetGraphLayout",
-        "title": "PDP: Reset Graph Layout",
+        "title": "pdp: Reset Graph Layout",
         "icon": "$(discard)"
       },
       {
         "command": "pdp.saveGraphLayout",
-        "title": "PDP: Save Graph Layout as Default",
+        "title": "pdp: Save Graph Layout as Default",
         "icon": "$(save)"
       },
       {
         "command": "pdp.graphZoomIn",
-        "title": "PDP: Graph Zoom In",
+        "title": "pdp: Graph Zoom In",
         "icon": "$(zoom-in)"
       },
       {
         "command": "pdp.graphZoomOut",
-        "title": "PDP: Graph Zoom Out",
+        "title": "pdp: Graph Zoom Out",
         "icon": "$(zoom-out)"
       },
       {
         "command": "pdp.graphChooseLayout",
-        "title": "PDP: Choose Graph Layout…",
+        "title": "pdp: Choose Graph Layout…",
         "icon": "$(layout)"
       },
       {
         "command": "pdp.dagsterLocal",
-        "title": "PDP: Start Dagster (Local)",
+        "title": "pdp: Start Dagster (Local)",
         "icon": "$(rocket)"
       },
       {
         "command": "pdp.dagsterSlurm",
-        "title": "PDP: Start Dagster (Slurm)"
+        "title": "pdp: Start Dagster (Slurm)"
       },
       {
         "command": "pdp.remoteStart",
-        "title": "PDP: Remote Start",
+        "title": "pdp: Remote Start",
         "icon": "$(globe)"
       },
       {
         "command": "pdp.remoteRunAll",
-        "title": "PDP: Remote Run All"
+        "title": "pdp: Remote Run All"
       },
       {
         "command": "pdp.remoteRunTask",
-        "title": "PDP: Remote Run Task"
+        "title": "pdp: Remote Run Task"
       },
       {
         "command": "pdp.remotePush",
-        "title": "PDP: Remote Push"
+        "title": "pdp: Remote Push"
       },
       {
         "command": "pdp.remotePull",
-        "title": "PDP: Remote Pull"
+        "title": "pdp: Remote Pull"
       },
       {
         "command": "pdp.remoteStop",
-        "title": "PDP: Remote Stop"
+        "title": "pdp: Remote Stop"
       },
       {
         "command": "pdp.remoteRefresh",
-        "title": "PDP: Remote Status",
+        "title": "pdp: Remote Status",
         "icon": "$(refresh)"
       },
       {
         "command": "pdp.openDagsterUi",
-        "title": "PDP: Open Dagster UI",
+        "title": "pdp: Open Dagster UI",
         "icon": "$(browser)"
       },
       {
         "command": "pdp.showShortcuts",
-        "title": "PDP: Keyboard Shortcuts"
+        "title": "pdp: Keyboard Shortcuts"
       },
       {
         "command": "pdp.rerunLast",
-        "title": "PDP: Re-run Last Run"
+        "title": "pdp: Re-run Last Run"
       },
       {
         "command": "pdp.stopProcess",
-        "title": "PDP: Stop Process",
+        "title": "pdp: Stop Process",
         "icon": "$(debug-stop)"
       }
     ],
@@ -231,7 +231,7 @@
       "activitybar": [
         {
           "id": "pdp",
-          "title": "PDP",
+          "title": "pdp",
           "icon": "media/pdp.svg"
         }
       ]
@@ -612,7 +612,7 @@
       }
     ],
     "configuration": {
-      "title": "PDP",
+      "title": "pdp",
       "properties": {
         "pdp.path": {
           "type": "string",
@@ -622,7 +622,7 @@
         "pdp.dagsterPort": {
           "type": "number",
           "default": 3000,
-          "description": "Port for the local Dagster UI started by PDP: Start Dagster."
+          "description": "Port for the local Dagster UI started by pdp: Start Dagster."
         },
         "pdp.graphFontSize": {
           "type": "number",

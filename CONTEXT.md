@@ -54,7 +54,7 @@ tasks ran, were fresh, failed, had no entrypoint or were skipped, as pdp
 reported them. _Avoid_: Run report (pdp's name for the data the summary is built
 from), toast.
 
-**Output log**: The hidden "PDP" Output panel holding the full text of every
+**Output log**: The hidden "pdp" Output panel holding the full text of every
 command. Opened only when the user asks, or from a failed Result summary.
 _Avoid_: Terminal, console.
 
