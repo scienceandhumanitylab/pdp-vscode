@@ -7,6 +7,8 @@ to structure this file.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-11-22
+
 ### Added
 
 - Single-key shortcuts in the Tasks view, acting on the highlighted task (the
